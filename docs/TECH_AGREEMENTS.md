@@ -8,8 +8,8 @@
 
 | Часть | Что используем |
 |---|---|
-| Язык | Java 21 (LTS) [согласовать с Готовцом В.: 17 или 21] |
-| Фреймворк | Spring Boot 3.x: Web MVC, Security, Data JPA, Validation, Actuator |
+| Язык | Java 25 (LTS) [согласовать с Готовцом В.] |
+| Фреймворк | Spring Boot 3.5.x (последний патч; официально поддерживает Java 17–25): Web MVC, Security, Data JPA, Validation, Actuator |
 | Шаблоны | Thymeleaf + thymeleaf-extras-springsecurity6 |
 | Модули | Spring Modulith |
 | Маппинг | MapStruct (+ `lombok-mapstruct-binding`, если используем Lombok) |
