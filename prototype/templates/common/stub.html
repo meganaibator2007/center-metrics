@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Функция в разработке — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../user/login.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <div class="stubs">
+        <section class="state stub-default">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Функция в разработке</h1>
+          <p class="muted">В прототипе есть интерфейс основных экранов. Эта функция появится в одном из следующих спринтов.</p>
+        </section>
+        <section class="state stub-item" id="history">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">История по прошлым периодам</h1>
+          <p class="muted">Преподаватель сможет посмотреть свои данные и баллы за закрытые периоды и сравнить их с текущим.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 5 · 16.11 — 27.11</span><span class="badge badge--plain">US-18</span></p>
+        </section>
+        <section class="state stub-item" id="dashboard">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Дашборд руководителя</h1>
+          <p class="muted">Динамика баллов по периодам, распределение по кафедрам и разделам, доля сданных отчётов.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 6 · 30.11 — 11.12</span><span class="badge badge--plain">US-26</span></p>
+        </section>
+        <section class="state stub-item" id="export">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Выгрузка в PDF и Excel</h1>
+          <p class="muted">Отчёт преподавателя и сводный отчёт можно будет скачать файлом. PDF и Excel формируются на сервере (OpenPDF, Apache POI).</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 5 · 16.11 — 27.11</span><span class="badge badge--plain">US-23</span></p>
+        </section>
+        <section class="state stub-item" id="review">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Приёмка и возврат отчёта</h1>
+          <p class="muted">Администратор принимает отчёт или возвращает его на доработку с обязательным комментарием. После возврата у преподавателя снова открывается редактирование.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 5 · 16.11 — 27.11</span><span class="badge badge--plain">US-25</span></p>
+        </section>
+        <section class="state stub-item" id="fields">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Редактор полей показателя</h1>
+          <p class="muted">Администратор настраивает, какие сведения заполняет преподаватель: например, название статьи, журнал, год и ссылку. Описание полей хранится вместе с показателем (JSONB).</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 5 · 16.11 — 27.11</span><span class="badge badge--plain">T-40</span></p>
+        </section>
+        <section class="state stub-item" id="archive">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Архив показателей</h1>
+          <p class="muted">Показатель, по которому уже есть данные, не удаляется, а переносится в архив: старые отчёты не ломаются, а в новых периодах показатель не виден.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 3 · 19.10 — 30.10</span><span class="badge badge--plain">US-11</span></p>
+        </section>
+        <section class="state stub-item" id="close-period">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Закрытие периода</h1>
+          <p class="muted">После закрытия данные за период нельзя изменить, баллы в нём больше не пересчитываются. Закрытие подтверждается на отдельной странице.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 3 · 19.10 — 30.10</span><span class="badge badge--plain">US-14</span></p>
+        </section>
+        <section class="state stub-item" id="password">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Смена и сброс пароля</h1>
+          <p class="muted">Пользователь сможет сменить пароль сам, а администратор — выдать новый временный пароль.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 5 · 16.11 — 27.11</span><span class="badge badge--plain">US-10</span></p>
+        </section>
+        <section class="state stub-item" id="user-edit">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Редактирование пользователя</h1>
+          <p class="muted">Изменение ФИО, роли и кафедры, блокировка учётной записи. Удалять пользователей не будем — только блокировать.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 3 · 19.10 — 30.10</span><span class="badge badge--plain">US-09</span></p>
+        </section>
+        <section class="state stub-item" id="help">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Справка для пользователей</h1>
+          <p class="muted">Короткие инструкции для преподавателя и администратора: как внести данные, отправить отчёт, сформировать сводный отчёт.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 6 · 30.11 — 11.12</span><span class="badge badge--plain">US-28</span></p>
+        </section>
+        <section class="state stub-item" id="privacy">
+          <span class="tag">В разработке</span>
+          <h1 class="state__title">Обработка персональных данных</h1>
+          <p class="muted">Какие сведения о преподавателях хранит система, кто и зачем имеет к ним доступ — по требованиям 152-ФЗ.</p>
+          <p class="stub-plan"><span class="badge badge--sent badge--plain">Спринт 6 · 30.11 — 11.12</span><span class="badge badge--plain">US-28</span></p>
+        </section>
+      </div>
+      <div class="state__actions">
+        <a class="btn btn--outline" href="../entry/cabinet.html">В кабинет преподавателя</a>
+        <a class="btn btn--outline" href="../report/control.html">В раздел администратора</a>
+        <a class="btn btn--secondary" href="../../index.html">Карта экранов</a>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

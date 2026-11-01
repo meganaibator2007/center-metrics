@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Отчётные периоды — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Администратор</span>
+        <span>Смирнова Елена Викторовна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../report/control.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../report/control.html">Контроль сдачи</a>
+        <a href="../report/summary.html">Сводный отчёт</a>
+        <a href="../indicator/list.html">Показатели</a>
+        <a href="../period/list.html" aria-current="page">Периоды</a>
+        <a href="../user/list.html">Пользователи</a>
+        <a href="../common/stub.html#dashboard">Дашборд <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <ol class="breadcrumbs" aria-label="Навигационная цепочка">
+        <li><a href="../report/control.html">Главная</a></li>
+        <li aria-current="page">Отчётные периоды</li>
+      </ol>
+      <div class="page-head">
+        <div>
+          <h1>Отчётные периоды</h1>
+          <p class="page-head__lead">За какое время преподаватели вносят данные. Закрытый период изменить нельзя, баллы в нём больше не пересчитываются.</p>
+        </div>
+      </div>
+
+      <div class="grid grid--sidebar">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Название</th>
+                <th scope="col">Тип</th>
+                <th scope="col">Начало</th>
+                <th scope="col">Окончание</th>
+                <th scope="col">Статус</th>
+                <th scope="col"><span class="visually-hidden">Действия</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1 семестр 2026/27</strong></td>
+                <td>Семестр</td>
+                <td class="nowrap">01.09.2026</td>
+                <td class="nowrap">31.01.2027</td>
+                <td><span class="badge badge--open">Открыт</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="../common/stub.html#close-period">Закрыть</a></div></td>
+              </tr>
+              <tr>
+                <td><strong>Октябрь 2026</strong></td>
+                <td>Месяц</td>
+                <td class="nowrap">01.10.2026</td>
+                <td class="nowrap">31.10.2026</td>
+                <td><span class="badge badge--open">Открыт</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="../common/stub.html#close-period">Закрыть</a></div></td>
+              </tr>
+              <tr>
+                <td><strong>Сентябрь 2026</strong></td>
+                <td>Месяц</td>
+                <td class="nowrap">01.09.2026</td>
+                <td class="nowrap">30.09.2026</td>
+                <td><span class="badge badge--closed">Закрыт</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../report/summary.html">Отчёт</a></div></td>
+              </tr>
+              <tr>
+                <td><strong>2 семестр 2025/26</strong></td>
+                <td>Семестр</td>
+                <td class="nowrap">01.02.2026</td>
+                <td class="nowrap">30.06.2026</td>
+                <td><span class="badge badge--closed">Закрыт</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../report/summary.html">Отчёт</a></div></td>
+              </tr>
+              <tr>
+                <td><strong>2025/26 учебный год</strong></td>
+                <td>Год</td>
+                <td class="nowrap">01.09.2025</td>
+                <td class="nowrap">31.08.2026</td>
+                <td><span class="badge badge--closed">Закрыт</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../report/summary.html">Отчёт</a></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <aside class="card">
+          <h3 class="card__title">Новый период</h3>
+          <form class="form" action="list.html" method="get">
+            <div class="field">
+              <label class="field__label" for="kind">Тип <span class="req-mark">*</span></label>
+              <select class="select" id="kind" required>
+                <option value="">Выберите тип</option>
+                <option>Месяц</option>
+                <option>Квартал</option>
+                <option>Семестр</option>
+                <option>Год</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="pname">Название <span class="req-mark">*</span></label>
+              <input class="input" id="pname" type="text" required placeholder="Например, «Ноябрь 2026»">
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label class="field__label" for="start">Начало <span class="req-mark">*</span></label>
+                <input class="input" id="start" type="date" required>
+              </div>
+              <div class="field">
+                <label class="field__label" for="end">Окончание <span class="req-mark">*</span></label>
+                <input class="input" id="end" type="date" required>
+              </div>
+            </div>
+            <p class="field__hint">Периоды одного типа не должны пересекаться — это проверит сервер.</p>
+            <div class="form-actions">
+              <button class="btn btn--primary btn--block" type="submit">Создать период</button>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Новый показатель — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Администратор</span>
+        <span>Смирнова Елена Викторовна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../report/control.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../report/control.html">Контроль сдачи</a>
+        <a href="../report/summary.html">Сводный отчёт</a>
+        <a href="../indicator/list.html" aria-current="page">Показатели</a>
+        <a href="../period/list.html">Периоды</a>
+        <a href="../user/list.html">Пользователи</a>
+        <a href="../common/stub.html#dashboard">Дашборд <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <ol class="breadcrumbs" aria-label="Навигационная цепочка">
+        <li><a href="../report/control.html">Главная</a></li>
+        <li><a href="list.html">Справочник показателей</a></li>
+        <li aria-current="page">Новый показатель</li>
+      </ol>
+      <div class="page-head">
+        <div>
+          <h1>Новый показатель</h1>
+          <p class="page-head__lead">Показатель появится у преподавателей в текущем открытом периоде.</p>
+        </div>
+      </div>
+
+      <div class="grid grid--sidebar">
+        <!-- Thymeleaf: th:action="@{/admin/indicators}" method="post" th:object="${indicatorForm}"; серверная проверка тех же правил -->
+        <form class="form" action="list.html" method="get">
+          <div class="field">
+            <label class="field__label" for="name">Название <span class="req-mark">*</span></label>
+            <input class="input" id="name" type="text" required minlength="3" maxlength="200" placeholder="Например, «Статья в журнале из перечня ВАК»">
+          </div>
+          <div class="field">
+            <label class="field__label" for="category">Раздел <span class="req-mark">*</span></label>
+            <select class="select" id="category" required>
+              <option value="">Выберите раздел</option>
+              <option>Учебная работа</option>
+              <option>Научная работа</option>
+              <option>Методическая работа</option>
+              <option>Воспитательная работа</option>
+            </select>
+          </div>
+          <div class="form-row form-row--3">
+            <div class="field">
+              <label class="field__label" for="unit">Единица <span class="req-mark">*</span></label>
+              <select class="select" id="unit" required>
+                <option value="">—</option>
+                <option>шт.</option>
+                <option>чел.</option>
+                <option>ч</option>
+                <option>п. л.</option>
+                <option>группа</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="coef">Коэффициент <span class="req-mark">*</span></label>
+              <input class="input" id="coef" type="number" min="0.01" step="0.01" required>
+              <p class="field__hint">Больше 0</p>
+            </div>
+            <div class="field">
+              <label class="field__label" for="max">Макс. балл <span class="req-mark">*</span></label>
+              <input class="input" id="max" type="number" min="0.01" step="0.01" required>
+              <p class="field__hint">Больше 0</p>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox"> Обязательный показатель — без него преподаватель не сможет отправить отчёт</label>
+          <div class="field">
+            <label class="field__label" for="descr">Пояснение для преподавателей</label>
+            <textarea class="textarea" id="descr" placeholder="Что учитывается и какие документы нужно приложить"></textarea>
+          </div>
+          <fieldset class="fieldset">
+            <legend>Поля формы ввода</legend>
+            <p class="field__hint">Какие сведения заполняет преподаватель: например, для публикации — название, журнал, год и ссылку. Поля настраиваются после сохранения показателя.</p>
+            <a class="link-arrow" href="../common/stub.html#fields">Открыть редактор полей</a>
+          </fieldset>
+          <div class="form-actions">
+            <button class="btn btn--primary" type="submit">Сохранить</button>
+            <a class="btn btn--secondary" href="list.html">Отмена</a>
+          </div>
+        </form>
+
+        <aside class="card">
+          <h3 class="card__title">Как считается балл</h3>
+          <p class="formula">Балл = значение × коэффициент, но не больше максимального балла</p>
+          <ul class="list-steps text-small">
+            <li>Название, раздел, единица и коэффициент обязательны.</li>
+            <li>Коэффициент и максимальный балл должны быть больше нуля.</li>
+            <li>Баллы пересчитываются при каждом сохранении данных преподавателем.</li>
+            <li>Закрытые периоды не пересчитываются.</li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

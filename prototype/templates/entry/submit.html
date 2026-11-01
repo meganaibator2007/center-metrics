@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Отправка отчёта — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Преподаватель</span>
+        <span>Иванова Анна Петровна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../entry/cabinet.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../entry/cabinet.html" aria-current="page">Кабинет</a>
+        <a href="../entry/form.html">Ввод данных</a>
+        <a href="../report/teacher.html">Мой отчёт</a>
+        <a href="../common/stub.html#history">История <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <ol class="breadcrumbs" aria-label="Навигационная цепочка">
+        <li><a href="cabinet.html">Главная</a></li>
+        <li aria-current="page">Отправка отчёта</li>
+      </ol>
+      <div class="page-head">
+        <div>
+          <h1>Отправка отчёта на проверку</h1>
+          <p class="page-head__lead">После отправки данные за период нельзя будет изменить. Если администратор вернёт отчёт на доработку, редактирование откроется снова.</p>
+        </div>
+      </div>
+
+      <div class="alert alert--error">
+        <p class="alert__title">Отчёт нельзя отправить</p>
+        <p>Не заполнен обязательный показатель «Повышение квалификации» (методическая работа). Заполните его и попробуйте снова.</p>
+      </div>
+
+      <dl class="meta">
+        <div><dt>Период</dt><dd>1 семестр 2026/27</dd></div>
+        <div><dt>Сумма баллов</dt><dd>94 из 188</dd></div>
+        <div><dt>Заполнено показателей</dt><dd>7 из 10</dd></div>
+        <div><dt>Обязательные</dt><dd>2 из 3</dd></div>
+      </dl>
+
+      <div class="form-actions">
+        <button class="btn btn--primary" type="button" disabled>Отправить отчёт</button>
+        <a class="btn btn--outline btn--arrow" href="form.html">Заполнить показатель</a>
+        <a class="btn btn--secondary" href="cabinet.html">Вернуться в кабинет</a>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

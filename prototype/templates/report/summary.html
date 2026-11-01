@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Сводный отчёт — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Администратор</span>
+        <span>Смирнова Елена Викторовна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../report/control.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../report/control.html">Контроль сдачи</a>
+        <a href="../report/summary.html" aria-current="page">Сводный отчёт</a>
+        <a href="../indicator/list.html">Показатели</a>
+        <a href="../period/list.html">Периоды</a>
+        <a href="../user/list.html">Пользователи</a>
+        <a href="../common/stub.html#dashboard">Дашборд <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <ol class="breadcrumbs" aria-label="Навигационная цепочка">
+        <li><a href="control.html">Главная</a></li>
+        <li aria-current="page">Сводный отчёт</li>
+      </ol>
+      <div class="page-head">
+        <div>
+          <h1>Сводный отчёт по преподавателям</h1>
+          <p class="page-head__lead">Рейтинг по сумме баллов за период. Рейтинг видит только администратор, преподаватель — только свои данные.</p>
+        </div>
+        <div class="page-head__actions">
+          <a class="btn btn--outline" href="../common/stub.html#export">Скачать PDF</a>
+          <a class="btn btn--outline" href="../common/stub.html#export">Скачать Excel</a>
+        </div>
+      </div>
+
+      <!-- Thymeleaf: фильтры и сортировка — параметры URL (?period=&dept=&sort=), без JS -->
+      <form class="filters" action="summary.html" method="get">
+        <div class="field field--grow">
+          <label class="field__label" for="period">Период</label>
+          <select class="select" id="period">
+              <option selected>1 семестр 2026/27 (01.09.2026 — 31.01.2027)</option>
+              <option>Октябрь 2026</option>
+              <option>Сентябрь 2026 — закрыт</option>
+              <option>2 семестр 2025/26 — закрыт</option>
+            </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="dept">Кафедра</label>
+          <select class="select" id="dept">
+              <option selected>Все кафедры</option>
+              <option>Информационных технологий</option>
+              <option>Математики</option>
+              <option>Экономической теории</option>
+              <option>Иностранных языков</option>
+            </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="status">Статус отчёта</label>
+          <select class="select" id="status">
+            <option selected>Все</option>
+            <option>Отправлен</option>
+            <option>Принят</option>
+            <option>Черновик</option>
+          </select>
+        </div>
+        <button class="btn btn--primary" type="submit">Сформировать</button>
+      </form>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col">Место</th>
+              <th scope="col"><a href="summary.html?sort=name">Преподаватель ↕</a></th>
+              <th scope="col" class="num"><a href="summary.html?sort=teaching">Учебная ↕</a></th>
+              <th scope="col" class="num"><a href="summary.html?sort=science">Научная ↕</a></th>
+              <th scope="col" class="num"><a href="summary.html?sort=method">Методическая ↕</a></th>
+              <th scope="col" class="num"><a href="summary.html?sort=education">Воспитательная ↕</a></th>
+              <th scope="col" class="num"><a href="summary.html?sort=total" aria-current="true">Итого ↓</a></th>
+              <th scope="col">Статус</th>
+            </tr>
+          </thead>
+          <tbody>
+              <tr>
+                <td><span class="rank rank--top">1</span></td>
+                <td><a href="teacher-admin.html">Соколов Дмитрий Андреевич</a><span class="cell-sub">Кафедра информационных технологий</span></td>
+                <td class="num">38</td>
+                <td class="num">70</td>
+                <td class="num">24</td>
+                <td class="num">15</td>
+                <td class="num"><strong>147</strong></td>
+                <td><span class="badge badge--accepted">Принят</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank rank--top">2</span></td>
+                <td><a href="teacher-admin.html">Кузнецова Мария Олеговна</a><span class="cell-sub">Кафедра математики</span></td>
+                <td class="num">30</td>
+                <td class="num">65</td>
+                <td class="num">20</td>
+                <td class="num">10</td>
+                <td class="num"><strong>125</strong></td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank rank--top">3</span></td>
+                <td><a href="teacher-admin.html">Орлов Павел Игоревич</a><span class="cell-sub">Кафедра экономической теории</span></td>
+                <td class="num">26</td>
+                <td class="num">55</td>
+                <td class="num">28</td>
+                <td class="num">12</td>
+                <td class="num"><strong>121</strong></td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">4</span></td>
+                <td><a href="teacher-admin.html">Иванова Анна Петровна</a><span class="cell-sub">Кафедра информационных технологий</span></td>
+                <td class="num">24</td>
+                <td class="num">59</td>
+                <td class="num">0</td>
+                <td class="num">11</td>
+                <td class="num"><strong>94</strong></td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">5</span></td>
+                <td><a href="teacher-admin.html">Морозов Алексей Викторович</a><span class="cell-sub">Кафедра математики</span></td>
+                <td class="num">28</td>
+                <td class="num">40</td>
+                <td class="num">12</td>
+                <td class="num">8</td>
+                <td class="num"><strong>88</strong></td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">6</span></td>
+                <td><a href="teacher-admin.html">Лебедева Ольга Сергеевна</a><span class="cell-sub">Кафедра иностранных языков</span></td>
+                <td class="num">32</td>
+                <td class="num">25</td>
+                <td class="num">16</td>
+                <td class="num">10</td>
+                <td class="num"><strong>83</strong></td>
+                <td><span class="badge badge--returned">На доработке</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">7</span></td>
+                <td><a href="teacher-admin.html">Новиков Игорь Романович</a><span class="cell-sub">Кафедра экономической теории</span></td>
+                <td class="num">20</td>
+                <td class="num">35</td>
+                <td class="num">8</td>
+                <td class="num">5</td>
+                <td class="num"><strong>68</strong></td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">8</span></td>
+                <td><a href="teacher-admin.html">Волкова Татьяна Юрьевна</a><span class="cell-sub">Кафедра иностранных языков</span></td>
+                <td class="num">22</td>
+                <td class="num">20</td>
+                <td class="num">12</td>
+                <td class="num">10</td>
+                <td class="num"><strong>64</strong></td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">9</span></td>
+                <td><a href="teacher-admin.html">Фёдоров Николай Петрович</a><span class="cell-sub">Кафедра информационных технологий</span></td>
+                <td class="num">18</td>
+                <td class="num">25</td>
+                <td class="num">4</td>
+                <td class="num">5</td>
+                <td class="num"><strong>52</strong></td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">10</span></td>
+                <td><a href="teacher-admin.html">Козлова Екатерина Андреевна</a><span class="cell-sub">Кафедра математики</span></td>
+                <td class="num">16</td>
+                <td class="num">15</td>
+                <td class="num">8</td>
+                <td class="num">0</td>
+                <td class="num"><strong>39</strong></td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">11</span></td>
+                <td><a href="teacher-admin.html">Егоров Максим Владимирович</a><span class="cell-sub">Кафедра экономической теории</span></td>
+                <td class="num">0</td>
+                <td class="num">0</td>
+                <td class="num">0</td>
+                <td class="num">0</td>
+                <td class="num"><strong>0</strong></td>
+                <td><span class="badge badge--none">Нет записей</span></td>
+              </tr>
+              <tr>
+                <td><span class="rank">12</span></td>
+                <td><a href="teacher-admin.html">Павлова Светлана Игоревна</a><span class="cell-sub">Кафедра иностранных языков</span></td>
+                <td class="num">0</td>
+                <td class="num">0</td>
+                <td class="num">0</td>
+                <td class="num">0</td>
+                <td class="num"><strong>0</strong></td>
+                <td><span class="badge badge--none">Нет записей</span></td>
+              </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2">Средний балл</td>
+              <td class="num">21,2</td>
+              <td class="num">34,1</td>
+              <td class="num">11</td>
+              <td class="num">7,2</td>
+              <td class="num">73,4</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="table-footer"><span>Сортировка — по клику на заголовок столбца. Баллы по разделам ограничены максимумами показателей.</span></p>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
