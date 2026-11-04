@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ввод данных — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Преподаватель</span>
+        <span>Иванова Анна Петровна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../entry/cabinet.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../entry/cabinet.html">Кабинет</a>
+        <a href="../entry/form.html" aria-current="page">Ввод данных</a>
+        <a href="../report/teacher.html">Мой отчёт</a>
+        <a href="../common/stub.html#history">История <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <ol class="breadcrumbs" aria-label="Навигационная цепочка">
+        <li><a href="cabinet.html">Главная</a></li>
+        <li aria-current="page">Ввод данных</li>
+      </ol>
+      <div class="page-head">
+        <div>
+          <h1>Ввод данных по показателю</h1>
+          <p class="page-head__lead">Период: 1 семестр 2026/27. Данные можно менять, пока период открыт и отчёт не отправлен.</p>
+        </div>
+      </div>
+
+      <div class="grid grid--sidebar">
+        <!-- Thymeleaf: th:action="@{/entries}" method="post" th:object="${entryForm}"; ошибки — th:errors под полями.
+             В прототипе «Сохранить» просто возвращает в кабинет (как redirect после POST). -->
+        <form class="form" action="cabinet.html" method="get">
+          <div class="field">
+            <label class="field__label" for="indicator">Показатель <span class="req-mark">*</span></label>
+            <select class="select" id="indicator" required>
+              <option value="">Выберите показатель</option>
+              <optgroup label="Учебная работа">
+                <option>Разработка рабочей программы дисциплины</option>
+                <option>Руководство выпускными квалификационными работами *</option>
+                <option>Проведение открытого занятия</option>
+              </optgroup>
+              <optgroup label="Научная работа">
+                <option>Статья в журнале из перечня ВАК *</option>
+                <option>Статья в журнале РИНЦ</option>
+                <option>Доклад на научной конференции</option>
+              </optgroup>
+              <optgroup label="Методическая работа">
+                <option>Учебное пособие</option>
+                <option selected>Повышение квалификации *</option>
+              </optgroup>
+              <optgroup label="Воспитательная работа">
+                <option>Кураторство учебной группы</option>
+                <option>Подготовка студентов к олимпиадам и конкурсам</option>
+              </optgroup>
+            </select>
+            <p class="field__hint">Звёздочкой отмечены обязательные показатели</p>
+          </div>
+
+          <fieldset class="fieldset">
+            <legend>Сведения о курсе повышения квалификации</legend>
+            <p class="field__hint">Набор полей зависит от выбранного показателя — его настраивает администратор.</p>
+            <div class="field">
+              <label class="field__label" for="program">Название программы <span class="req-mark">*</span></label>
+              <input class="input" id="program" type="text" required placeholder="Например, «Цифровые инструменты в преподавании»">
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label class="field__label" for="org">Организация <span class="req-mark">*</span></label>
+                <input class="input" id="org" type="text" required>
+              </div>
+              <div class="field">
+                <label class="field__label" for="cert">Номер удостоверения</label>
+                <input class="input" id="cert" type="text">
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="form-row">
+            <div class="field">
+              <label class="field__label" for="value">Объём, часов <span class="req-mark">*</span></label>
+              <input class="input" id="value" type="number" min="1" max="1000" step="1" required>
+              <p class="field__hint">Целое число от 1</p>
+            </div>
+            <div class="field">
+              <label class="field__label" for="date">Дата окончания <span class="req-mark">*</span></label>
+              <input class="input" id="date" type="date" min="2026-09-01" max="2027-01-31" value="2026-10-13" required>
+              <p class="field__hint">В пределах периода: 01.09.2026 — 31.01.2027</p>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="file">Подтверждающий документ</label>
+            <input class="input" id="file" type="file" accept=".pdf,.jpg,.jpeg,.png">
+            <p class="field__hint">PDF, JPG или PNG, не больше 10 МБ. Сохранение файлов на сервере — спринт 4.</p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="comment">Комментарий</label>
+            <textarea class="textarea" id="comment" placeholder="Например: обучение проходило дистанционно"></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn--primary" type="submit">Сохранить</button>
+            <a class="btn btn--secondary" href="cabinet.html">Отмена</a>
+          </div>
+        </form>
+
+        <aside class="card">
+          <h3 class="card__title">Как считаются баллы</h3>
+          <p class="formula">Балл = часы × 0,1, но не больше 10</p>
+          <dl class="kv">
+            <dt>Категория</dt><dd>Методическая работа</dd>
+            <dt>Единица</dt><dd>часы</dd>
+            <dt>Коэффициент</dt><dd>0,1</dd>
+            <dt>Максимальный балл</dt><dd>10</dd>
+            <dt>Обязательный</dt><dd>да</dd>
+          </dl>
+          <p class="text-small muted">Например, курс на 72 часа даст 7,2 балла. Баллы пересчитываются сразу после сохранения.</p>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

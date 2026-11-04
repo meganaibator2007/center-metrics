@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Карта экранов — Показатели центра</title>
+  <link rel="icon" href="static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="index.html">
+        <img class="header__logo" src="static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+    </div>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="container">
+        <p class="hero__kicker">Прототип интерфейса · спринт 2</p>
+        <h1>Система учёта показателей деятельности центра</h1>
+        <p>Преподаватели вносят данные о своей работе, система сама считает баллы, руководство видит контроль сдачи и сводный отчёт. Это кликабельный прототип на HTML и CSS в фирменном стиле Финуниверситета; серверную часть (Java, Spring Boot) подключаем в следующих спринтах.</p>
+        <div class="page-head__actions">
+          <a class="btn btn--white btn--arrow" href="templates/user/login.html">Начать со входа</a>
+          <a class="btn btn--primary" href="templates/entry/cabinet.html">Кабинет преподавателя</a>
+          <a class="btn btn--primary" href="templates/report/control.html">Раздел администратора</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="page">
+    <div class="container">
+      <div class="section__head">
+        <h2>Карта экранов</h2>
+        <span class="muted">Готово 16 из 20 экранов, остальное — заглушки с планом по спринтам</span>
+      </div>
+      <div class="grid grid--3">
+        <section class="card">
+          <h3 class="card__title">Преподаватель</h3>
+          <ul class="screen-list">
+            <li><a href="templates/user/login.html">Вход в систему</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-26</span></span></li>
+            <li><a href="templates/entry/cabinet.html">Личный кабинет</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-47</span></span></li>
+            <li><a href="templates/entry/form.html">Ввод данных по показателю</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-50, T-51</span></span></li>
+            <li><a href="templates/entry/submit.html">Отправка отчёта</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">US-20</span></span></li>
+            <li><a href="templates/report/teacher.html">Мой отчёт + печать</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-67</span></span></li>
+            <li><a href="templates/common/stub.html#history">История по периодам</a><span><span class="badge badge--draft">Заглушка</span> <span class="tag">US-18</span></span></li>
+          </ul>
+        </section>
+        <section class="card">
+          <h3 class="card__title">Администратор</h3>
+          <ul class="screen-list">
+            <li><a href="templates/report/control.html">Контроль сдачи</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-74</span></span></li>
+            <li><a href="templates/report/summary.html">Сводный отчёт и рейтинг</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-69</span></span></li>
+            <li><a href="templates/report/teacher-admin.html">Отчёт преподавателя</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-67</span></span></li>
+            <li><a href="templates/indicator/list.html">Справочник показателей</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-36</span></span></li>
+            <li><a href="templates/indicator/form.html">Форма показателя</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-37</span></span></li>
+            <li><a href="templates/period/list.html">Отчётные периоды</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">US-13</span></span></li>
+            <li><a href="templates/user/list.html">Пользователи</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-31</span></span></li>
+            <li><a href="templates/user/form.html">Новый пользователь</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">US-09</span></span></li>
+            <li><a href="templates/common/stub.html#dashboard">Дашборд</a><span><span class="badge badge--draft">Заглушка</span> <span class="tag">US-26</span></span></li>
+          </ul>
+        </section>
+        <section class="card">
+          <h3 class="card__title">Общие</h3>
+          <ul class="screen-list">
+            <li><a href="templates/error/403.html">Ошибка 403</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-07</span></span></li>
+            <li><a href="templates/error/404.html">Ошибка 404</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-07</span></span></li>
+            <li><a href="templates/error/500.html">Ошибка 500</a><span><span class="badge badge--accepted">Готов</span> <span class="tag">T-07</span></span></li>
+            <li><a href="templates/common/stub.html#export">Экспорт PDF / Excel</a><span><span class="badge badge--draft">Заглушка</span> <span class="tag">US-23</span></span></li>
+            <li><a href="templates/common/stub.html#review">Приёмка отчёта</a><span><span class="badge badge--draft">Заглушка</span> <span class="tag">US-25</span></span></li>
+          </ul>
+        </section>
+      </div>
+
+      <section class="section">
+        <div class="grid grid--2">
+          <section class="card card--outline">
+            <h3 class="card__title">Что уже есть</h3>
+            <ul class="list-steps">
+              <li>Все основные экраны обеих ролей, переходы между ними</li>
+              <li>Фирменный стиль: цвета, шрифты, логотип, сетка, кнопки и табы по брендбуку</li>
+              <li>Проверка форм средствами HTML: обязательные поля, числа больше нуля, даты в пределах периода</li>
+              <li>Адаптивная вёрстка для телефона и печатная версия отчёта</li>
+              <li>Чистая вёрстка без JavaScript и inline-стилей: экраны и стили переносятся в клиент на React</li>
+            </ul>
+          </section>
+          <section class="card card--outline">
+            <h3 class="card__title">Что подключаем дальше</h3>
+            <ul class="list-steps">
+              <li>Каркас, CI, вход и роли — Spring Security (спринт 3)</li>
+              <li>Справочник, периоды, ввод данных и расчёт баллов — спринт 3</li>
+              <li>Файлы, отправка отчёта, отчёты и контроль сдачи — спринт 4, MVP 13.11</li>
+              <li>Экспорт PDF/Excel, приёмка отчётов, история — спринт 5</li>
+              <li>Дашборд и финальное тестирование — спринт 6</li>
+            </ul>
+          </section>
+        </div>
+      </section>
+    </div>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="templates/common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="templates/common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

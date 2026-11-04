@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Контроль сдачи — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Администратор</span>
+        <span>Смирнова Елена Викторовна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../report/control.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../report/control.html" aria-current="page">Контроль сдачи</a>
+        <a href="../report/summary.html">Сводный отчёт</a>
+        <a href="../indicator/list.html">Показатели</a>
+        <a href="../period/list.html">Периоды</a>
+        <a href="../user/list.html">Пользователи</a>
+        <a href="../common/stub.html#dashboard">Дашборд <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <div class="page-head">
+        <div>
+          <h1>Контроль сдачи отчётов</h1>
+          <p class="page-head__lead">1 семестр 2026/27 · приём отчётов до 31.01.2027</p>
+        </div>
+        <div class="page-head__actions">
+          <a class="btn btn--outline btn--arrow" href="summary.html">Сводный отчёт</a>
+        </div>
+      </div>
+
+      <div class="grid grid--4">
+        <section class="card card--navy">
+          <p class="stat__label">Преподавателей</p>
+          <p class="stat__value">12</p>
+          <p class="stat__note">Все кафедры центра</p>
+        </section>
+        <section class="card card--accent">
+          <p class="stat__label">Сдали отчёт</p>
+          <p class="stat__value">5 <small>из 12</small></p>
+          <progress class="progress" value="5" max="12">5 из 12</progress>
+          <p class="stat__note">Отправлен или уже принят</p>
+        </section>
+        <section class="card">
+          <p class="stat__label">В работе</p>
+          <p class="stat__value">5</p>
+          <p class="stat__note">Черновик или на доработке</p>
+        </section>
+        <section class="card">
+          <p class="stat__label">Не начали</p>
+          <p class="stat__value">2</p>
+          <p class="stat__note">Нет ни одной записи за период</p>
+        </section>
+      </div>
+
+      <section class="section">
+        <ul class="tabs">
+          <li><a href="control.html" aria-current="page">Все · 12</a></li>
+          <li><a href="control.html?status=not-submitted">Не сдали · 7</a></li>
+          <li><a href="control.html?status=sent">Отправлены · 4</a></li>
+          <li><a href="control.html?status=accepted">Приняты · 1</a></li>
+        </ul>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Преподаватель</th>
+                <th scope="col">Заполнено</th>
+                <th scope="col" class="num">Баллы</th>
+                <th scope="col">Статус</th>
+                <th scope="col">Изменён</th>
+                <th scope="col"><span class="visually-hidden">Действия</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><a href="teacher-admin.html">Егоров Максим Владимирович</a><span class="cell-sub">Кафедра экономической теории</span></td>
+                <td>0 из 10<progress class="progress progress--sm" value="0" max="10">0 из 10</progress></td>
+                <td class="num">0</td>
+                <td><span class="badge badge--none">Нет записей</span></td>
+                <td class="nowrap">—</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Павлова Светлана Игоревна</a><span class="cell-sub">Кафедра иностранных языков</span></td>
+                <td>0 из 10<progress class="progress progress--sm" value="0" max="10">0 из 10</progress></td>
+                <td class="num">0</td>
+                <td><span class="badge badge--none">Нет записей</span></td>
+                <td class="nowrap">—</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Иванова Анна Петровна</a><span class="cell-sub">Кафедра информационных технологий</span></td>
+                <td>7 из 10<progress class="progress progress--sm" value="7" max="10">7 из 10</progress></td>
+                <td class="num">94</td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+                <td class="nowrap">13.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Козлова Екатерина Андреевна</a><span class="cell-sub">Кафедра математики</span></td>
+                <td>4 из 10<progress class="progress progress--sm" value="4" max="10">4 из 10</progress></td>
+                <td class="num">39</td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+                <td class="nowrap">05.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Новиков Игорь Романович</a><span class="cell-sub">Кафедра экономической теории</span></td>
+                <td>6 из 10<progress class="progress progress--sm" value="6" max="10">6 из 10</progress></td>
+                <td class="num">68</td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+                <td class="nowrap">12.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Фёдоров Николай Петрович</a><span class="cell-sub">Кафедра информационных технологий</span></td>
+                <td>5 из 10<progress class="progress progress--sm" value="5" max="10">5 из 10</progress></td>
+                <td class="num">52</td>
+                <td><span class="badge badge--draft">Черновик</span></td>
+                <td class="nowrap">06.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Лебедева Ольга Сергеевна</a><span class="cell-sub">Кафедра иностранных языков</span></td>
+                <td>9 из 10<progress class="progress progress--sm" value="9" max="10">9 из 10</progress></td>
+                <td class="num">83</td>
+                <td><span class="badge badge--returned">На доработке</span></td>
+                <td class="nowrap">12.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Волкова Татьяна Юрьевна</a><span class="cell-sub">Кафедра иностранных языков</span></td>
+                <td>8 из 10<progress class="progress progress--sm" value="8" max="10">8 из 10</progress></td>
+                <td class="num">64</td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+                <td class="nowrap">07.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../common/stub.html#review">Принять / вернуть</a><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Кузнецова Мария Олеговна</a><span class="cell-sub">Кафедра математики</span></td>
+                <td>10 из 10<progress class="progress progress--sm" value="10" max="10">10 из 10</progress></td>
+                <td class="num">125</td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+                <td class="nowrap">11.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../common/stub.html#review">Принять / вернуть</a><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Морозов Алексей Викторович</a><span class="cell-sub">Кафедра математики</span></td>
+                <td>8 из 10<progress class="progress progress--sm" value="8" max="10">8 из 10</progress></td>
+                <td class="num">88</td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+                <td class="nowrap">09.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../common/stub.html#review">Принять / вернуть</a><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Орлов Павел Игоревич</a><span class="cell-sub">Кафедра экономической теории</span></td>
+                <td>9 из 10<progress class="progress progress--sm" value="9" max="10">9 из 10</progress></td>
+                <td class="num">121</td>
+                <td><span class="badge badge--sent">Отправлен</span></td>
+                <td class="nowrap">10.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--secondary" href="../common/stub.html#review">Принять / вернуть</a><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+              <tr>
+                <td><a href="teacher-admin.html">Соколов Дмитрий Андреевич</a><span class="cell-sub">Кафедра информационных технологий</span></td>
+                <td>10 из 10<progress class="progress progress--sm" value="10" max="10">10 из 10</progress></td>
+                <td class="num">147</td>
+                <td><span class="badge badge--accepted">Принят</span></td>
+                <td class="nowrap">08.10.2026</td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="teacher-admin.html">Открыть</a></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="table-footer"><span>Сначала показаны те, кто ещё не сдал отчёт.</span></p>
+      </section>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

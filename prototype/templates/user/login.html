@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <main class="auth">
+    <section class="auth__brand">
+      <img class="auth__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="240" height="77">
+      <div>
+        <h1 class="auth__title">Учёт показателей деятельности центра</h1>
+        <p class="auth__text">Вносите результаты работы за отчётный период — баллы посчитаются автоматически, а отчёт для руководства соберётся сам.</p>
+      </div>
+      <p class="auth__foot">Учебный проект · Финансовый университет, 2026</p>
+    </section>
+
+    <section class="auth__main">
+      <div class="auth__card">
+        <h2>Вход в систему</h2>
+        <p class="muted">Логин и пароль выдаёт администратор центра.</p>
+        <!-- Thymeleaf: th:action="@{/login}" method="post", поля name="username" и name="password" (Spring Security).
+             В прототипе у полей нет name, чтобы пароль не попадал в адресную строку; форма просто открывает кабинет. -->
+        <form class="form" action="../entry/cabinet.html" method="get">
+          <div class="field">
+            <label class="field__label" for="login">Логин</label>
+            <input class="input" id="login" type="text" autocomplete="username" required placeholder="например, a.ivanova">
+          </div>
+          <div class="field">
+            <label class="field__label" for="password">Пароль</label>
+            <input class="input" id="password" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn--primary btn--block" type="submit">Войти</button>
+          </div>
+          <a class="text-small" href="../common/stub.html#password">Забыли пароль?</a>
+        </form>
+
+        <div class="demo-box">
+          <p class="demo-box__title">Демо-режим: войти без пароля</p>
+          <div class="demo-box__actions">
+            <a class="btn btn--secondary btn--arrow" href="../entry/cabinet.html">Как преподаватель</a>
+            <a class="btn btn--secondary btn--arrow" href="../report/control.html">Как администратор</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

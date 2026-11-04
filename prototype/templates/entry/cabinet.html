@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Личный кабинет — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Преподаватель</span>
+        <span>Иванова Анна Петровна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../entry/cabinet.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../entry/cabinet.html" aria-current="page">Кабинет</a>
+        <a href="../entry/form.html">Ввод данных</a>
+        <a href="../report/teacher.html">Мой отчёт</a>
+        <a href="../common/stub.html#history">История <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <div class="page-head">
+        <div>
+          <h1>Личный кабинет</h1>
+          <p class="page-head__lead">Иванова Анна Петровна · доцент кафедры информационных технологий</p>
+        </div>
+        <div class="page-head__actions">
+          <a class="btn btn--outline" href="../report/teacher.html">Мой отчёт</a>
+          <a class="btn btn--primary" href="form.html">Внести данные</a>
+        </div>
+      </div>
+
+      <!-- Thymeleaf: смена периода — GET-параметр ?period=..., без JS -->
+      <form class="filters" action="cabinet.html" method="get">
+        <div class="field field--grow">
+          <label class="field__label" for="period">Отчётный период</label>
+          <select class="select" id="period">
+              <option selected>1 семестр 2026/27 (01.09.2026 — 31.01.2027)</option>
+              <option>Октябрь 2026</option>
+              <option>Сентябрь 2026 — закрыт</option>
+              <option>2 семестр 2025/26 — закрыт</option>
+            </select>
+        </div>
+        <button class="btn btn--outline" type="submit">Показать</button>
+      </form>
+
+      <div class="grid grid--4">
+        <section class="card card--accent">
+          <p class="stat__label">Сумма баллов</p>
+          <p class="stat__value">94 <small>из 188</small></p>
+          <progress class="progress" value="94" max="188">50 %</progress>
+          <p class="stat__note">Считается автоматически при сохранении</p>
+        </section>
+        <section class="card">
+          <p class="stat__label">Заполнено показателей</p>
+          <p class="stat__value">7 <small>из 10</small></p>
+          <progress class="progress" value="7" max="10">7 из 10</progress>
+        </section>
+        <section class="card">
+          <p class="stat__label">Обязательные показатели</p>
+          <p class="stat__value">2 <small>из 3</small></p>
+          <p class="stat__note">Без них отчёт не отправить</p>
+        </section>
+        <section class="card">
+          <p class="stat__label">Статус отчёта</p>
+          <p class="stat__value">Черновик</p>
+          <p class="stat__note">Отправить до 31.01.2027</p>
+        </section>
+      </div>
+
+      <section class="section">
+        <div class="alert alert--error">
+          <p class="alert__title">Не заполнен обязательный показатель</p>
+          <p>«Повышение квалификации» — без него отчёт нельзя отправить на проверку. <a href="form.html">Заполнить сейчас</a></p>
+        </div>
+        <div class="section__head">
+          <h2>Показатели за период</h2>
+          <a class="btn btn--primary btn--arrow" href="submit.html">Отправить на проверку</a>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th scope="col">Показатель</th>
+                <th scope="col">Ед. изм.</th>
+                <th scope="col" class="num">Значение</th>
+                <th scope="col" class="num">Коэф.</th>
+                <th scope="col" class="num">Баллы</th>
+                <th scope="col" class="num">Макс.</th>
+                <th scope="col">Статус</th>
+                <th scope="col"><span class="visually-hidden">Действия</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="table__group">
+                <td colspan="4">Учебная работа</td>
+                <td class="num">24</td>
+                <td class="num">46</td><td colspan="2"></td>
+              </tr>
+              <tr>
+                <td>Разработка рабочей программы дисциплины</td>
+                <td>шт.</td>
+                <td class="num">2</td>
+                <td class="num">× 6</td>
+                <td class="num"><strong>12</strong></td>
+                <td class="num">18</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+              <tr>
+                <td>Руководство выпускными квалификационными работами <span class="req-mark" title="Обязательный показатель">*</span></td>
+                <td>чел.</td>
+                <td class="num">6</td>
+                <td class="num">× 2</td>
+                <td class="num"><strong>12</strong></td>
+                <td class="num">20</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+              <tr>
+                <td>Проведение открытого занятия</td>
+                <td>шт.</td>
+                <td class="num">—</td>
+                <td class="num">× 4</td>
+                <td class="num"><strong>0</strong></td>
+                <td class="num">8</td>
+                <td><span class="badge badge--none">Не заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--primary" href="form.html">Внести</a></div></td>
+              </tr>
+              <tr class="table__group">
+                <td colspan="4">Научная работа</td>
+                <td class="num">59</td>
+                <td class="num">75</td><td colspan="2"></td>
+              </tr>
+              <tr>
+                <td>Статья в журнале из перечня ВАК <span class="req-mark" title="Обязательный показатель">*</span></td>
+                <td>шт.</td>
+                <td class="num">5</td>
+                <td class="num">× 10</td>
+                <td class="num"><span class="tip" tabindex="0" data-tip="5 × 10 = 50, но не больше максимума 40"><strong>40</strong><span class="tip__icon" aria-hidden="true">i</span><span class="visually-hidden">: 5 × 10 = 50, ограничено максимумом 40</span></span></td>
+                <td class="num">40</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+              <tr>
+                <td>Статья в журнале РИНЦ</td>
+                <td>шт.</td>
+                <td class="num">2</td>
+                <td class="num">× 5</td>
+                <td class="num"><strong>10</strong></td>
+                <td class="num">20</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+              <tr>
+                <td>Доклад на научной конференции</td>
+                <td>шт.</td>
+                <td class="num">3</td>
+                <td class="num">× 3</td>
+                <td class="num"><strong>9</strong></td>
+                <td class="num">15</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+              <tr class="table__group">
+                <td colspan="4">Методическая работа</td>
+                <td class="num">0</td>
+                <td class="num">42</td><td colspan="2"></td>
+              </tr>
+              <tr>
+                <td>Учебное пособие</td>
+                <td>п. л.</td>
+                <td class="num">—</td>
+                <td class="num">× 4</td>
+                <td class="num"><strong>0</strong></td>
+                <td class="num">32</td>
+                <td><span class="badge badge--none">Не заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--primary" href="form.html">Внести</a></div></td>
+              </tr>
+              <tr class="row--warning">
+                <td>Повышение квалификации <span class="req-mark" title="Обязательный показатель">*</span></td>
+                <td>ч</td>
+                <td class="num">—</td>
+                <td class="num">× 0,1</td>
+                <td class="num"><strong>0</strong></td>
+                <td class="num">10</td>
+                <td><span class="badge badge--returned">Нужно заполнить</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--primary" href="form.html">Внести</a></div></td>
+              </tr>
+              <tr class="table__group">
+                <td colspan="4">Воспитательная работа</td>
+                <td class="num">11</td>
+                <td class="num">25</td><td colspan="2"></td>
+              </tr>
+              <tr>
+                <td>Кураторство учебной группы</td>
+                <td>группа</td>
+                <td class="num">1</td>
+                <td class="num">× 5</td>
+                <td class="num"><strong>5</strong></td>
+                <td class="num">10</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+              <tr>
+                <td>Подготовка студентов к олимпиадам и конкурсам</td>
+                <td>чел.</td>
+                <td class="num">2</td>
+                <td class="num">× 3</td>
+                <td class="num"><strong>6</strong></td>
+                <td class="num">15</td>
+                <td><span class="badge badge--sent">Заполнен</span></td>
+                <td><div class="cell-actions"><a class="btn btn--small btn--outline" href="form.html">Изменить</a></div></td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4">Итого за период</td>
+                <td class="num">94</td>
+                <td class="num">188</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span><span class="req-mark">*</span> — обязательный показатель. Балл = значение × коэффициент, но не больше максимального балла.</span>
+          <a class="link-arrow" href="../common/stub.html#history">История по прошлым периодам</a>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
