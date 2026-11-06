@@ -13,12 +13,12 @@
 | Интерфейс | React, TypeScript, Vite, React Router |
 | Стили | один файл `main.css` с фирменными токенами брендбука, без CSS-фреймворков |
 | Модули | Spring Modulith 2.x (версия, совместимая со Spring Boot 4.1) |
-| Маппинг | MapStruct (+ `lombok-mapstruct-binding`, если используем Lombok) |
+| Маппинг | ручные мапперы `XxxMapper` со статическими методами, без библиотек |
 | БД | PostgreSQL 16 |
 | Миграции | Flyway |
-| Сборка | Maven (через `./mvnw`, версия Maven зафиксирована в wrapper); клиент собирается внутри сборки Maven |
+| Сборка | Maven (через `./mvnw`, версия Maven зафиксирована в wrapper): корневой `pom.xml` и два модуля — `app` (весь Java-код) и `frontend` (клиент) |
 | Тесты | JUnit 5, Spring Boot Test, Testcontainers (PostgreSQL), JaCoCo |
-| Стиль кода | Checkstyle (Java), ESLint (TypeScript) |
+| Стиль кода | Checkstyle (Java), oxlint (TypeScript) |
 | Инфраструктура | Docker Compose, GitHub Actions |
 
 Интерфейс – клиентское приложение React, сервер отдаёт данные через REST API в формате JSON. Решение и альтернативы описаны в [ADR-02](adr/ADR-02-react-client.md).
@@ -47,13 +47,15 @@ ru.fa.kpi
 |---|---|---|
 | `User` | JPA-сущность | package-private, где возможно |
 | `UserRepository` | Spring Data JPA | package-private |
-| `UserMapper` | MapStruct: Request → Entity → Dto | package-private |
+| `UserMapper` | ручной маппер: Request → Entity → Dto | package-private |
 | `UserController` | REST API пакета: принимает запросы, отдаёт JSON | package-private |
 | `UserRequest` | тело запроса + аннотации валидации | package-private |
 | `UserDto` | данные для ответа API и других пакетов (record) | **public** |
 | `UserService` | бизнес-логика, транзакции – API пакета | **public** |
 
 Если в пакете больше ~15 файлов, допускается подпакет (например, `entry/attachment`).
+
+Маппер пишется руками: статические методы `toDto(User)`, `toEntity(UserRequest)`, `update(User, UserRequest)`. Поля переносятся явно, по одному. `id`, роль, пароль и статус из запроса не копируются никогда, их задаёт сервис. DTO — `record`, поэтому новое поле не забудется: без него не соберётся вызов конструктора.
 
 ### 2.2 Правила зависимостей
 
@@ -112,7 +114,7 @@ frontend/
     └── styles/main.css      все стили проекта
 ```
 
-Папки в `pages/` повторяют пакеты сервера. Миграции Flyway остаются в `src/main/resources/db/migration`.
+Папки в `pages/` повторяют пакеты сервера. Миграции Flyway лежат в `app/src/main/resources/db/migration`.
 
 ### 3.3 Сборка и запуск
 
@@ -144,7 +146,8 @@ frontend/
 ## 4. База данных и миграции
 
 - Схема меняется **только** миграциями Flyway. `spring.jpa.hibernate.ddl-auto=validate`.
-- Имя файла: `V<номер>__<пакет>_<что_делает>.sql`, например `V3__entry_create_tables.sql`.
+- Имя файла: `V<номер>__<пакет>_<что_делает>.sql`, между номером и описанием два подчёркивания. У каждого пакета свой диапазон номеров: user 100–199, indicator 200–299, period 300–399, entry 400–499, scoring 500–599, report 600–699. Например, `V400__entry_create_tables.sql`, следующая миграция пакета — `V401__entry_add_comment.sql`.
+- Из-за диапазонов новая миграция может получить номер меньше уже применённой (`V101` после `V600`), поэтому включено `spring.flyway.out-of-order: true`.
 - **Применённую миграцию не редактируем никогда.** Нужна правка – пишем новую миграцию.
 - Таблицы с префиксом пакета: `usr_`, `ind_`, `per_`, `ent_`, `scr_`, `rep_`.
 - Между пакетами храним только ID, без внешних ключей и без JOIN в коде.
@@ -168,14 +171,14 @@ frontend/
 | REST-контроллеры | `@WebMvcTest` | обязательно проверка 403 на чужие данные |
 | Репозитории | `@DataJpaTest` + Testcontainers PostgreSQL | для запросов с JSONB |
 | Границы пакетов | Spring Modulith `verify()` | в CI |
-| Клиент | проверка типов TypeScript, ESLint, сборка Vite | в CI |
+| Клиент | проверка типов TypeScript, oxlint, сборка Vite | в CI |
 
 Юнит-тесты пишет автор кода. Ручное тестирование по тест-кейсам – Черенков С.
 
 ## 7. Стиль кода
 
 - Checkstyle в CI, конфигурация лежит в репозитории [согласовать: Google Java Style с отступом 4].
-- ESLint в CI для TypeScript, конфигурация лежит в репозитории.
+- oxlint в CI для TypeScript, конфигурация `frontend/.oxlintrc.json` лежит в репозитории.
 - Классы – существительные (`UserService`), методы – глаголы (`createUser`). Компоненты React – с большой буквы (`UserListPage`).
 - Комментарии и сообщения пользователю – на русском, имена в коде – на английском.
 - Lombok допускается для `@Getter`, `@Setter`, `@RequiredArgsConstructor`; `@Data` на JPA-сущностях не используем.
