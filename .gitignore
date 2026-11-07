@@ -1,0 +1,13 @@
+# Игнорируем файл с локальными паролями
+.env
+
+# Временные папки сборщика Java (Maven / Gradle)
+target/
+build/
+.gradle/
+*.jar
+*.war
+
+# Настройки VS Code
+.vscode/
+.DS_Store
