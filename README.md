@@ -3,10 +3,14 @@
 
 ## Документы
 
-- [Архитектура](docs/ARCHITECTURE.md): пакеты, кто от кого зависит, миграции, мапперы
+- [Архитектура](docs/ARCHITECTURE.md): три контейнера, пакеты, кто от кого зависит, миграции, мапперы
 - [Контракт API](docs/api.md): список адресов. Поля запросов и ответов — в [openapi.yaml](app/src/main/resources/static/openapi.yaml)
 
-## Что нужно
+## Как устроено
+
+Три контейнера: `frontend` (nginx раздаёт React и пересылает `/api`) → `backend` (Spring Boot) → `db` (PostgreSQL 16). Подробнее — в [архитектуре](docs/ARCHITECTURE.md#docker). Файлы Docker появятся с задачей T-05.
+
+## Что нужно для бэкенда
 
 - JDK 25
 - PostgreSQL 16 для запуска, Docker для тестов с базой
@@ -31,7 +35,7 @@ Maven ставить не нужно: проект собирается чере
 ./mvnw -pl app spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-Другие параметры базы задаются переменными `DB_URL`, `DB_USER`, `DB_PASSWORD`.
+Другие параметры базы задаются переменными `DB_URL`, `DB_USER`, `DB_PASSWORD`, папка для файлов — `APP_STORAGE_DIR` (по умолчанию `./uploads`).
 
 | Адрес | Что там |
 |---|---|

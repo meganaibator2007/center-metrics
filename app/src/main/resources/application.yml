@@ -24,10 +24,17 @@ spring:
         serialization-mode: via-dto
 
 server:
+  # Бэкенд работает за nginx: адрес и схему запроса берём из заголовков X-Forwarded-*
+  forward-headers-strategy: framework
   servlet:
     session:
       cookie:
         same-site: lax
+
+app:
+  storage:
+    # Папка для прикреплённых файлов, вне static/. В Docker — том uploads
+    dir: ${APP_STORAGE_DIR:./uploads}
 
 # Проверка сервера: GET /api/health
 management:

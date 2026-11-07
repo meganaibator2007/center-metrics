@@ -5,14 +5,22 @@
 
 ## Коротко
 
-Одно приложение Spring Boot: один jar, один процесс, одна база PostgreSQL. Это модульный монолит: код разделён на пакеты по фичам, и каждый пакет можно позже выделить в отдельный сервис.
+Сервер — одно приложение Spring Boot. Это модульный монолит: код разделён на пакеты по фичам, и каждый пакет можно позже выделить в отдельный сервис.
 
-Maven-модулей два:
+Система запускается в трёх контейнерах, как в ShareIt (gateway → server → db):
 
-| Модуль | Что внутри |
-|---|---|
-| `app` | весь Java-код, настройки, миграции, тесты |
-| `frontend` | клиент React (каркас в PR #126). План: добавить `frontend/pom.xml` и `<module>frontend</module>` в корневой `pom.xml`, тогда Maven сам соберёт клиент через Vite и положит его в jar `app` по пути `static/` |
+```
+браузер ──:80──▶ frontend (nginx + файлы React)
+                   ├─ /                  → index.html и файлы React
+                   └─ /api, Swagger      → backend:8080 (Spring Boot)
+                                               └──▶ db:5432 (PostgreSQL 16)
+```
+
+| Часть | Как собирается | Где |
+|---|---|---|
+| `app` | Maven (`./mvnw`), единственный Maven-модуль | `app/`, `app/Dockerfile` |
+| `frontend` | npm и Vite, в Maven не входит | `frontend/`, `frontend/Dockerfile`, `frontend/nginx.conf` |
+| база | готовый образ `postgres:16-alpine` | `docker-compose.yml` |
 
 ## Пакеты
 
@@ -20,7 +28,7 @@ Maven-модулей два:
 
 | Пакет | За что отвечает | Таблицы | Миграции |
 |---|---|---|---|
-| `common` | безопасность, формат ошибок, отдача клиента, общие события | — | — |
+| `common` | безопасность, формат ошибок, общие события | — | — |
 | `user` | пользователи, роли, вход и выход, смена пароля | `usr_` | V100–V199 |
 | `indicator` | категории, показатели, коэффициент, максимальный балл, архив, поля формы | `ind_` | V200–V299 |
 | `period` | отчётные периоды, проверка пересечения дат, закрытие | `per_` | V300–V399 |
@@ -124,16 +132,34 @@ entry их слушает и блокирует или разблокирует 
 ## API и Swagger
 
 - Список адресов — [api.md](api.md), поля запросов и ответов — `app/src/main/resources/static/openapi.yaml` (OpenAPI 3.1). Меняем контракт — правим оба файла.
-- Swagger UI: http://localhost:8080/swagger-ui.html. На вкладке «Контракт API» — все запланированные методы, на вкладке «Реализовано в коде» — то, что уже есть в контроллерах.
+- Swagger UI: http://localhost/swagger-ui.html через nginx или http://localhost:8080/swagger-ui.html напрямую в бэкенд. На вкладке «Контракт API» — все запланированные методы, на вкладке «Реализовано в коде» — то, что уже есть в контроллерах.
 - `GET /api/health` отдаёт Spring Boot Actuator, он проверяет и подключение к базе. Отдельный `HealthController` не нужен.
 
-## Клиент в jar
+## Клиент
 
-`common/SpaConfig` отдаёт файлы клиента из `classpath:/static/`. Если файла нет, а адрес похож на экран клиента (`/admin/users`, `/cabinet`), отдаётся `index.html`, и экран выбирает React Router. Адреса `/api` и файлы с расширением не подменяются: для них остаётся 404.
+Клиент React живёт отдельно от Java-кода: собирается командой `npm run build` в статические файлы, их раздаёт nginx в контейнере `frontend`.
+
+- nginx пересылает в бэкенд `/api`, Swagger (`/swagger-ui`, `/v3/api-docs`) и `/openapi.yaml`. Для браузера сайт и API живут на одном адресе, поэтому CORS не нужен, cookie сессии и CSRF работают без настройки.
+- Любой другой адрес (`/admin/users`, `/cabinet`) nginx отдаёт как `index.html`, экран выбирает React Router.
+- Бэкенд стоит за прокси, поэтому включено `server.forward-headers-strategy: framework`: адрес и схему запроса Spring берёт из заголовков `X-Forwarded-*`.
+- При разработке Docker для клиента не нужен: `npm run dev` поднимает Vite на `localhost:5173` и сам пересылает `/api` на `localhost:8080`.
 
 ## Docker
 
-`Dockerfile` собирает jar сам, в два этапа: сначала образ с JDK запускает `./mvnw package`, потом готовый jar копируется в лёгкий образ с JRE. Иначе на чистом компьютере `docker compose up` не соберётся, потому что `app/target` там пустой. Node.js отдельно ставить не нужно, клиент собирает Maven-плагин. Dockerfile и `docker-compose.yml` — отдельная задача.
+Три контейнера в `docker-compose.yml` (задача T-05):
+
+| Сервис | Образ | Наружу |
+|---|---|---|
+| `frontend` | `frontend/Dockerfile`: Node собирает React, `nginx:stable-alpine` раздаёт | порт 80 |
+| `backend` | `app/Dockerfile`: JDK 25 собирает jar через `./mvnw`, JRE 25 запускает. Собирается из корня проекта: Maven нужны `mvnw` и корневой `pom.xml` | только внутри сети Docker |
+| `db` | `postgres:16-alpine`, данные в томе `pg_data` | только внутри сети Docker |
+
+- Сборка идёт внутри Docker, поэтому на чистом компьютере `docker compose up` работает без Java, Maven и Node.
+- Порядок запуска: база готова (`pg_isready`) → бэкенд готов (`/api/health`) → nginx.
+- Файлы к записям лежат в томе `uploads`, путь передаётся переменной `APP_STORAGE_DIR` (`app.storage.dir`).
+- Пароли — в `.env`, в репозитории только `.env.example`.
+- `docker-compose.override.yml` подключается локально сам: открывает базу на 5432 (для IntelliJ) и бэкенд на 8080, включает профиль `dev`. На стенде запуск без него: `docker compose -f docker-compose.yml up -d --build`.
+- Каждый день: бэкенд — `docker compose up -d db` и запуск из IntelliJ; клиент — `docker compose up -d db backend` и `npm run dev`.
 
 ## Файловая структура
 
@@ -141,11 +167,13 @@ entry их слушает и блокирует или разблокирует 
 
 ```
 center-metrics/
-├── pom.xml                       родитель: Spring Boot 4.1.2, Java 25, модули
+├── pom.xml                       родитель: Spring Boot 4.1.2, Java 25, модуль app
 ├── mvnw, mvnw.cmd, .mvn/         Maven Wrapper 3.9.16
 ├── .gitignore, .gitattributes
 ├── README.md
-├── Dockerfile, docker-compose.yml, .env.example    план
+├── docker-compose.yml            frontend, backend, db; план (T-05)
+├── docker-compose.override.yml   локально: порты базы и бэкенда, профиль dev; план
+├── .env.example, .dockerignore   план
 ├── .github/                      шаблоны и CI, план
 ├── docs/
 │   ├── TECH_AGREEMENTS.md        PR #123
@@ -153,8 +181,11 @@ center-metrics/
 │   ├── api.md                    список адресов API
 │   └── adr/
 ├── frontend/                     клиент React, PR #126
+│   ├── Dockerfile                Node собирает, nginx раздаёт; план
+│   └── nginx.conf                файлы React и пересылка /api; план
 └── app/
     ├── pom.xml
+    ├── Dockerfile                JDK собирает jar, JRE запускает; план
     └── src/
         ├── main/java/ru/fa/kpi/
         │   ├── KpiApplication.java
@@ -163,7 +194,6 @@ center-metrics/
         │   │   ├── CsrfController.java       GET /api/auth/csrf
         │   │   ├── ApiExceptionHandler.java  ошибки в формате ProblemDetail
         │   │   ├── NotFoundException.java, ConflictException.java
-        │   │   ├── SpaConfig.java            index.html для экранов клиента
         │   │   └── ReportSubmitted.java, ReportReturned.java
         │   ├── user/          package-info.java; план: User, Role, UserRepository, UserMapper,
         │   │                  UserController, AuthController, UserRequest, LoginRequest, UserDto, UserService
@@ -180,30 +210,29 @@ center-metrics/
         │                      ReportController, CabinetController, ReportDto, SummaryRowDto, ControlRowDto,
         │                      CabinetDto, ReportService
         ├── main/resources/
-        │   ├── application.yml           база из переменных DB_URL, DB_USER, DB_PASSWORD
+        │   ├── application.yml           база из DB_URL, DB_USER, DB_PASSWORD; файлы в APP_STORAGE_DIR
         │   ├── application-dev.yml       локальная база и тестовые данные
         │   ├── db/migration/             V100__user_create_tables.sql … V600__report_create_tables.sql, план
         │   ├── db/seed/                  тестовые данные, план
         │   └── static/openapi.yaml       контракт API для Swagger UI
-        └── test/
-            ├── java/ru/fa/kpi/
-            │   ├── ModularityTest.java           границы пакетов
-            │   ├── KpiApplicationTests.java      приложение целиком на PostgreSQL в Docker
-            │   ├── TestcontainersConfiguration.java
-            │   ├── common/                       SecurityConfigTest, ApiExceptionHandlerTest, SpaConfigTest
-            │   └── user/, indicator/, …          план: тесты пакетов
-            └── resources/static/index.html       заглушка клиента для SpaConfigTest
+        └── test/java/ru/fa/kpi/
+            ├── ModularityTest.java           границы пакетов
+            ├── KpiApplicationTests.java      приложение целиком на PostgreSQL в Docker
+            ├── TestcontainersConfiguration.java
+            ├── common/                       SecurityConfigTest, ApiExceptionHandlerTest
+            └── user/, indicator/, …          план: тесты пакетов
 ```
 
 ## Журнал решений
 
 | Дата | Решение | Почему |
 |---|---|---|
-| 07.11 | Два Maven-модуля `app` и `frontend` вместо модуля на каждый пакет | один запускаемый jar, границы пакетов проверяет Spring Modulith |
+| 07.11 | Один Maven-модуль `app` вместо модуля на каждый пакет | один запускаемый jar, границы пакетов проверяет Spring Modulith |
+| 07.11 | Три контейнера: nginx с React, Spring Boot, PostgreSQL. Клиент в Maven не входит | фронт и бэк собираются и перезапускаются независимо: правка в CSS не пересобирает Java и не выкидывает пользователей из системы; привычная схема из ShareIt. Заменяет вариант «клиент внутри jar» из ADR-02 |
 | 07.11 | Ручные мапперы вместо MapStruct | так учили на курсе, меньше новых технологий; правило переноса полей выше |
 | 07.11 | События `ReportSubmitted` и `ReportReturned` в `common` | убирают цикл `entry` ↔ `report` |
 | 07.11 | Диапазоны номеров миграций и `out-of-order: true` | пакеты пишут миграции независимо |
 | 07.11 | Кафедра строкой, без `/api/departments` | проще для MVP, на клиенте уже строка |
-| 07.11 | Dockerfile собирает jar внутри Docker | `docker compose up` должен работать на чистом компьютере |
+| 07.11 | Dockerfile бэкенда и фронта собирают всё внутри Docker | `docker compose up` должен работать на чистом компьютере |
 | 07.11 | `/api/health` через Actuator вместо `HealthController` | меньше своего кода, заодно проверяется база |
 | 07.11 | Фильтры `archived` и `closed` вместо `status` у показателей и периодов | совпадают с полями DTO в `frontend/src/api/types.ts` |

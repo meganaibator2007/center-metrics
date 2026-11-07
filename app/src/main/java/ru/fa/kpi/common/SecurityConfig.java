@@ -32,7 +32,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(OPEN_API).permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        // Остальное — файлы клиента React и Swagger UI
+                        // Остальное — Swagger UI и openapi.yaml. Клиент React раздаёт nginx
                         .anyRequest().permitAll())
                 // Токен в cookie XSRF-TOKEN, клиент возвращает его в заголовке X-XSRF-TOKEN
                 .csrf(csrf -> csrf.spa())

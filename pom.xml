@@ -19,7 +19,7 @@
     <name>center-metrics</name>
     <description>Веб-система учёта показателей деятельности центра</description>
 
-    <!-- Модуль frontend добавляется вместе с каркасом клиента (PR #126) -->
+    <!-- Клиент (frontend/) собирается npm в своём Dockerfile и в Maven не входит -->
     <modules>
         <module>app</module>
     </modules>

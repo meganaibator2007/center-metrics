@@ -1,8 +1,10 @@
 package ru.fa.kpi.common;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +45,13 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.title").value("Нет CSRF-токена"));
+    }
+
+    @Test
+    void swaggerContractIsOpenWithoutLogin() throws Exception {
+        mvc.perform(get("/openapi.yaml"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("openapi: 3.1.0")));
     }
 
     @Test
