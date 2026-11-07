@@ -3,6 +3,7 @@
 > Эндпоинты пока не реализованы. Ниже указано то, что запланировано.
 
 Все адреса API начинаются с `/api`. Формат данных: JSON, ошибки: `ProblemDetail`.
+Поля запросов и ответов описаны в [openapi.yaml](../app/src/main/resources/static/openapi.yaml). После запуска сервера их можно смотреть в Swagger UI: http://localhost:8080/swagger-ui.html. Меняем запрос или ответ — правим оба файла.
 Для всех адресов, кроме входа, получения CSRF-cookie и проверки сервера, нужна сессия.
 
 Запросы, меняющие данные, включая `POST /api/auth/login`, требуют CSRF-токен. Перед входом клиент вызывает `GET /api/auth/csrf`, получает токен в cookie и передаёт его в заголовке запроса.
@@ -19,14 +20,15 @@
 
 ## Пользователи
 
+Кафедра хранится у пользователя строкой, отдельного справочника кафедр нет.
+
 | Метод | Адрес | Доступ | Назначение |
 |---|---|---|---|
-| GET | `/api/users?q=&role=&departmentId=&active=&page=` | админ | Список пользователей |
+| GET | `/api/users?q=&role=&department=&active=&page=&size=` | админ | Список пользователей |
 | POST | `/api/users` | админ | Создание пользователя |
 | GET | `/api/users/{id}` | админ | Карточка пользователя |
 | PUT | `/api/users/{id}` | админ | Изменение пользователя |
 | PATCH | `/api/users/{id}/active` | админ | Блокировка и разблокировка |
-| GET | `/api/departments` | админ | Кафедры для форм и фильтров |
 
 ## Категории и показатели
 
@@ -35,7 +37,7 @@
 | GET | `/api/categories` | вошедшие | Список категорий |
 | POST | `/api/categories` | админ | Создание категории |
 | PUT | `/api/categories/{id}` | админ | Изменение категории |
-| GET | `/api/indicators?categoryId=&q=&status=&required=` | вошедшие | Список показателей |
+| GET | `/api/indicators?categoryId=&q=&archived=&required=` | вошедшие | Список показателей |
 | GET | `/api/indicators/{id}` | вошедшие | Карточка показателя |
 | POST | `/api/indicators` | админ | Создание показателя |
 | PUT | `/api/indicators/{id}` | админ | Изменение показателя |
@@ -45,7 +47,7 @@
 
 | Метод | Адрес | Доступ | Назначение |
 |---|---|---|---|
-| GET | `/api/periods?status=` | вошедшие | Список периодов |
+| GET | `/api/periods?closed=` | вошедшие | Список периодов |
 | POST | `/api/periods` | админ | Создание периода, 409 при пересечении дат |
 | PUT | `/api/periods/{id}` | админ | Изменение периода |
 | POST | `/api/periods/{id}/close` | админ | Закрытие периода |
@@ -71,7 +73,7 @@
 | GET | `/api/reports/my?periodId=` | преподаватель | Свой отчёт |
 | POST | `/api/reports/my/submit?periodId=` | преподаватель | Отправка отчёта, 409 без обязательных показателей |
 | GET | `/api/reports/teachers/{teacherId}?periodId=` | админ | Отчёт преподавателя |
-| GET | `/api/reports/summary?periodId=&departmentId=&status=&sort=` | админ | Сводный отчёт и рейтинг |
+| GET | `/api/reports/summary?periodId=&department=&status=&sort=` | админ | Сводный отчёт и рейтинг |
 | GET | `/api/reports/control?periodId=&status=` | админ | Контроль сдачи |
 
 ## После защиты
@@ -82,5 +84,5 @@
 | PUT | `/api/indicators/{id}/fields` | админ | Настройка полей показателя |
 | POST | `/api/reports/{id}/accept` | админ | Приёмка отчёта |
 | POST | `/api/reports/{id}/return` | админ | Возврат отчёта с комментарием |
-| GET | `/api/reports/summary/export?format=` | админ | Экспорт в PDF или Excel |
+| GET | `/api/reports/summary/export?periodId=&format=` | админ | Экспорт в PDF или Excel |
 | GET | `/api/dashboard?periodId=` | админ | Данные дашборда |
