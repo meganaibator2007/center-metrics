@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # База данных PostgreSQL 16
+  postgres_db:
+    image: postgres:${DB_POSTGRES_VERSION}
+    container_name: center_metrics_pg
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Твое Java-приложение
+  backend_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: center_metrics_backend
+    ports:
+      - "${APP_PORT}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres_db:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - app_files:/app/storage
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+    driver: local
+  app_files:
+    driver: local
