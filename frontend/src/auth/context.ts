@@ -1,12 +1,12 @@
 import { createContext } from 'react'
-import type { CurrentUser, Role } from '../api/types'
+import type { UserDto, Role } from '../api/types'
 
 export interface AuthState {
   /** Текущий пользователь, null — не вошёл */
-  user: CurrentUser | null
+  user: UserDto | null
   /** true, пока узнаём у сервера, есть ли сессия */
   loading: boolean
-  login: (login: string, password: string) => Promise<CurrentUser>
+  login: (login: string, password: string) => Promise<UserDto>
   logout: () => Promise<void>
 }
 

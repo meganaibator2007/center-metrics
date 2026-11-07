@@ -1,9 +1,9 @@
 import { request } from './client'
 import { ApiError } from './errors'
-import type { CurrentUser, LoginRequest } from './types'
+import type { UserDto, LoginRequest } from './types'
 
-export function login(data: LoginRequest): Promise<CurrentUser> {
-  return request<CurrentUser>('POST', '/auth/login', data)
+export function login(data: LoginRequest): Promise<UserDto> {
+  return request<UserDto>('POST', '/auth/login', data)
 }
 
 export function logout(): Promise<void> {
@@ -11,9 +11,9 @@ export function logout(): Promise<void> {
 }
 
 /** Текущий пользователь или null, если сессии нет */
-export async function me(): Promise<CurrentUser | null> {
+export async function me(): Promise<UserDto | null> {
   try {
-    return await request<CurrentUser>('GET', '/auth/me')
+    return await request<UserDto>('GET', '/auth/me')
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) return null
     throw error

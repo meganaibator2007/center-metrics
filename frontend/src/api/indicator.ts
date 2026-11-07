@@ -1,10 +1,10 @@
 import { request } from './client'
-import type { Category, Indicator } from './types'
+import type { CategoryDto, IndicatorDto } from './types'
 
-export function listCategories(): Promise<Category[]> {
-  return request<Category[]>('GET', '/categories')
+export function listCategories(): Promise<CategoryDto[]> {
+  return request<CategoryDto[]>('GET', '/categories')
 }
 
-export function listIndicators(): Promise<Indicator[]> {
-  return request<Indicator[]>('GET', '/indicators')
+export function listIndicators(): Promise<IndicatorDto[]> {
+  return request<IndicatorDto[]>('GET', '/indicators')
 }

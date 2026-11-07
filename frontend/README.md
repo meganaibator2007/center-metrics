@@ -35,7 +35,7 @@ src/
 ├── api/                 запросы к серверу
 │   ├── client.ts        один fetch на всё: CSRF-токен, ошибки ProblemDetail
 │   ├── mock.ts          заглушки, пока нет сервера
-│   ├── types.ts         формы данных, согласуются с docs/api.md
+│   ├── types.ts         формы данных = схемы из openapi.yaml
 │   └── auth.ts, indicator.ts, period.ts, report.ts
 ├── auth/                текущий пользователь, проверка роли
 ├── layout/              шапка, меню роли, подвал

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import * as authApi from '../api/auth'
-import type { CurrentUser } from '../api/types'
+import type { UserDto } from '../api/types'
 import { AuthContext, type AuthState } from './context'
 
 /** Хранит текущего пользователя для всего приложения */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<CurrentUser | null>(null)
+  const [user, setUser] = useState<UserDto | null>(null)
   const [loading, setLoading] = useState(true)
 
   // При открытии страницы спрашиваем сервер, есть ли уже сессия

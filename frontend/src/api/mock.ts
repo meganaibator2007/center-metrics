@@ -2,28 +2,36 @@
 // Включаются переменной VITE_API_MOCK=true (см. .env.development).
 
 import { ApiError } from './errors'
-import type { Cabinet, CabinetRow, Category, CurrentUser, Indicator, LoginRequest, Period } from './types'
+import type { Cabinet, CabinetRow, CategoryDto, IndicatorDto, LoginRequest, PeriodDto, UserDto } from './types'
 
-const users: Record<string, CurrentUser> = {
+const users: Record<string, UserDto> = {
   'a.ivanova': {
     id: 2,
     login: 'a.ivanova',
     fullName: 'Иванова Анна Петровна',
+    lastName: 'Иванова',
+    firstName: 'Анна',
+    middleName: 'Петровна',
     role: 'TEACHER',
     department: 'Информационных технологий',
     position: 'Доцент',
+    active: true,
   },
   'e.smirnova': {
     id: 1,
     login: 'e.smirnova',
     fullName: 'Смирнова Елена Викторовна',
+    lastName: 'Смирнова',
+    firstName: 'Елена',
+    middleName: 'Викторовна',
     role: 'ADMIN',
     department: null,
     position: 'Руководитель центра',
+    active: true,
   },
 }
 
-const categories: Category[] = [
+const categories: CategoryDto[] = [
   { id: 1, name: 'Учебная работа' },
   { id: 2, name: 'Научная работа' },
   { id: 3, name: 'Методическая работа' },
@@ -39,12 +47,12 @@ function indicator(
   maxScore: number,
   required = false,
   archived = false,
-): Indicator {
+): IndicatorDto {
   const categoryName = categories.find((c) => c.id === categoryId)?.name ?? ''
-  return { id, categoryId, categoryName, name, unit, coefficient, maxScore, required, archived }
+  return { id, categoryId, categoryName, name, unit, coefficient, maxScore, required, archived, description: null, fields: [] }
 }
 
-const indicators: Indicator[] = [
+const indicators: IndicatorDto[] = [
   indicator(1, 1, 'Разработка рабочей программы дисциплины', 'шт.', 6, 18),
   indicator(2, 1, 'Руководство выпускными квалификационными работами', 'чел.', 2, 20, true),
   indicator(3, 1, 'Проведение открытого занятия', 'шт.', 4, 8),
@@ -58,7 +66,7 @@ const indicators: Indicator[] = [
   indicator(11, 2, 'Статья в журнале Scopus / Web of Science', 'шт.', 15, 45, false, true),
 ]
 
-const periods: Period[] = [
+const periods: PeriodDto[] = [
   { id: 1, name: '1 семестр 2026/27', type: 'SEMESTER', startDate: '2026-09-01', endDate: '2027-01-31', closed: false },
   { id: 2, name: 'Октябрь 2026', type: 'MONTH', startDate: '2026-10-01', endDate: '2026-10-31', closed: false },
   { id: 3, name: 'Сентябрь 2026', type: 'MONTH', startDate: '2026-09-01', endDate: '2026-09-30', closed: true },
