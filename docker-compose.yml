@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # База данных PostgreSQL 16
   postgres_db:
     image: postgres:${DB_POSTGRES_VERSION}
     container_name: center_metrics_pg
@@ -20,7 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Твое Java-приложение
   backend_app:
     build:
       context: .
