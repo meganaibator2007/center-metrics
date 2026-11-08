@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  db:
+    ports:
+      - "${DB_PORT}:5432"
+
+  backend:
+    ports:
+      - "${APP_PORT}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
