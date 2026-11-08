@@ -1,13 +1,12 @@
 # Архитектура center-metrics
 
-Статус: структура согласована 07.11.2026, каркас собран в ветке `skeleton-project`.
-Общие правила стека и кода — в [техсоглашениях](TECH_AGREEMENTS.md) (PR #123), список адресов API — в [api.md](api.md).
+Связанные документы: [техсоглашения](TECH_AGREEMENTS.md), [база данных](DATABASE.md), [контракт API](api.md).
 
 ## Коротко
 
 Сервер — одно приложение Spring Boot. Это модульный монолит: код разделён на пакеты по фичам, и каждый пакет можно позже выделить в отдельный сервис.
 
-Система запускается в трёх контейнерах, как в ShareIt (gateway → server → db):
+Система запускается в трёх контейнерах:
 
 ```
 браузер ──:80──▶ frontend (nginx + файлы React)
@@ -16,10 +15,12 @@
                                                └──▶ db:5432 (PostgreSQL 16)
 ```
 
+Клиент и сервер собираются и перезапускаются независимо: правка клиента не пересобирает Java и не завершает сессии пользователей.
+
 | Часть | Как собирается | Где |
 |---|---|---|
-| `app` | Maven (`./mvnw`), единственный Maven-модуль | `app/`, `app/Dockerfile` |
-| `frontend` | npm и Vite, в Maven не входит | `frontend/`, `frontend/Dockerfile`, `frontend/nginx.conf` |
+| сервер | Maven (`./mvnw`), единственный Maven-модуль `app` | `app/`, `app/Dockerfile` |
+| клиент | npm и Vite, в Maven не входит | `frontend/`, `frontend/Dockerfile`, конфигурация nginx |
 | база | готовый образ `postgres:16-alpine` | `docker-compose.yml` |
 
 ## Пакеты
@@ -64,17 +65,17 @@ entry их слушает и блокирует или разблокирует 
 
 `scoring` зависит от `period`, чтобы не пересчитывать баллы закрытых периодов, когда у показателя меняется коэффициент.
 
-Таблицу проверяет тест `ModularityTest` (Spring Modulith). Если `entry` обратится к `report`, тест упадёт с сообщением вида «Module 'entry' depends on module 'report'… Allowed targets: common, user, indicator, period». Новая зависимость появляется только через правку `package-info.java` в PR, чтобы её увидели на ревью.
+Таблицу проверяет тест `ModularityTest` (Spring Modulith): если пакет обратится к пакету, которого нет в его списке, тест упадёт. Новая зависимость появляется только через правку `package-info.java`.
 
 ## События
 
 - `EntryChanged` лежит в `entry` и публикуется при сохранении и при удалении записи. `scoring` слушает его синхронно (`@EventListener`) в той же транзакции и пересчитывает баллы всех открытых периодов, в которые попадает дата записи.
-- `ReportSubmitted` и `ReportReturned` лежат в `common`. Если положить их в `report`, `entry` начал бы зависеть от `report`, а `report` и так зависит от `entry`, получился бы цикл.
-- В событиях передаём только ID и простые значения, не сущности.
+- `ReportSubmitted` и `ReportReturned` лежат в `common`, потому что `report` зависит от `entry`, и обратная зависимость дала бы цикл.
+- В событиях передаются только ID и простые значения, не сущности.
 
 ## Что лежит в пакете
 
-Цепочка как в ShareIt: `Controller → Service → Repository`. Контроллер не ходит в репозиторий и не содержит бизнес-логики.
+Цепочка вызовов: `Controller → Service → Repository`. Контроллер не обращается к репозиторию и не содержит бизнес-логики.
 
 | Файл | Назначение | Видимость |
 |---|---|---|
@@ -86,14 +87,14 @@ entry их слушает и блокирует или разблокирует 
 | `UserDto` | ответ API и данные для других пакетов (record) | public |
 | `UserService` | бизнес-логика и транзакции, API пакета | public |
 
-Другие пакеты используют только `XxxService` и `XxxDto`. Чужие сущности, репозитории и мапперы трогать нельзя.
+Другие пакеты используют только `XxxService` и `XxxDto`. Чужие сущности, репозитории и мапперы им недоступны.
 
 ## Мапперы
 
-Мапперы пишем руками, без MapStruct: статические методы `toDto(User)`, `toEntity(UserRequest)`, `update(User, UserRequest)`.
+Мапперы написаны вручную: статические методы `toDto(User)`, `toEntity(UserRequest)`, `update(User, UserRequest)`.
 
-- Поля переносим явно, по одному.
-- `id`, роль, пароль и статус маппер из запроса не копирует никогда. Их задаёт сервис: пароль сохраняет как хеш BCrypt, роль ставит только после проверки, что запрос пришёл от админа. Иначе пользователь мог бы прислать `"role": "ADMIN"` и стать админом.
+- Поля переносятся явно, по одному.
+- `id`, роль, пароль и статус маппер из запроса не копирует. Их задаёт сервис: пароль сохраняет как хеш BCrypt, роль ставит только после проверки, что запрос пришёл от админа.
 - DTO — `record`, поэтому новое поле не потеряется: без него не соберётся вызов конструктора.
 
 ## База и миграции
@@ -102,19 +103,19 @@ entry их слушает и блокирует или разблокирует 
 
 - **Журнал по датам.** Запись преподавателя не привязана к периоду, у неё есть дата. Отчёт за любой период — записи, дата которых в него входит: статья от 15.10 попадает и в октябрь, и в семестр без повторного ввода. Периоды разных типов могут накладываться, одного типа — нет.
 - Кабинет без `periodId` показывает открытый период, в который попадает сегодняшняя дата; если таких несколько — самый длинный; если ни одного — открытый период с самой поздней датой окончания.
-- Схему меняют только миграции Flyway, `ddl-auto: validate`.
-- Имя файла: `V<номер>__<пакет>_<что_делает>.sql`, между номером и описанием **два** подчёркивания. Например, `V100__user_create_tables.sql`, следующая миграция пакета — `V101__user_add_position.sql`. С одним подчёркиванием Flyway файл не увидит.
-- У каждого пакета свой диапазон номеров (таблица выше). Поэтому включено `spring.flyway.out-of-order: true`: иначе `V101`, добавленная после уже применённой `V600`, не накатится.
-- Применённую миграцию не редактируем. Нужна правка — пишем новую.
-- Между пакетами храним только ID, без внешних ключей и JOIN.
+- Схему меняют только миграции Flyway, Hibernate её проверяет (`ddl-auto: validate`).
+- Имя файла миграции: `V<номер>__<пакет>_<что_делает>.sql`, между номером и описанием два подчёркивания. Например, `V100__user_create_tables.sql`, следующая миграция пакета — `V101__user_add_position.sql`.
+- У каждого пакета свой диапазон номеров (таблица выше), поэтому пакеты пишут миграции независимо. Включено `spring.flyway.out-of-order: true`, иначе `V101`, добавленная после уже применённой `V600`, не накатится.
+- Применённая миграция не редактируется, правка делается новой миграцией.
+- Между пакетами хранятся только ID, без внешних ключей и JOIN.
 - Миграции лежат в `app/src/main/resources/db/migration`, тестовые данные — в `db/seed`, они подключаются только в профиле `dev`.
-- Кафедра для MVP — строка у пользователя (`department`), без отдельной сущности и без `/api/departments`. В формах кафедру выбирают из списка, а не вводят вручную, иначе «Кафедра ПИ» и «кафедра ПИ» станут разными кафедрами.
+- Кафедра — строка у пользователя (`department`), обязательна только у преподавателя. В формах кафедру выбирают из списка, чтобы одна кафедра не записывалась по-разному.
 
 ## Безопасность
 
 Настроена в `common/SecurityConfig`:
 
-- Вход по сессии в cookie `JSESSIONID` (HttpOnly), пароли хранятся как хеш BCrypt, JWT не используем.
+- Вход по сессии в cookie `JSESSIONID` (HttpOnly), пароли хранятся как хеш BCrypt.
 - Без входа открыты `GET /api/auth/csrf`, `POST /api/auth/login` и `GET /api/health`. Остальные адреса `/api` требуют входа, роль проверяется через `@PreAuthorize`.
 - CSRF: токен приходит в cookie `XSRF-TOKEN`, клиент возвращает его в заголовке `X-XSRF-TOKEN`.
 - Выход `POST /api/auth/logout` работает средствами Spring Security и отвечает 204.
@@ -135,9 +136,9 @@ entry их слушает и блокирует или разблокирует 
 
 ## API и Swagger
 
-- Список адресов — [api.md](api.md), поля запросов и ответов — `app/src/main/resources/static/openapi.yaml` (OpenAPI 3.1). Меняем контракт — правим оба файла.
-- Swagger UI: http://localhost/swagger-ui.html через nginx или http://localhost:8080/swagger-ui.html напрямую в бэкенд. На вкладке «Контракт API» — все запланированные методы, на вкладке «Реализовано в коде» — то, что уже есть в контроллерах.
-- `GET /api/health` отдаёт Spring Boot Actuator, он проверяет и подключение к базе. Отдельный `HealthController` не нужен.
+- Список адресов — [api.md](api.md), поля запросов и ответов — `app/src/main/resources/static/openapi.yaml` (OpenAPI 3.1). Эти два файла меняются вместе.
+- Swagger UI: `/swagger-ui.html`. На вкладке «Контракт API» — все методы контракта, на вкладке «Реализовано в коде» — то, что есть в контроллерах.
+- `GET /api/health` отдаёт Spring Boot Actuator, он проверяет и подключение к базе.
 
 ## Клиент
 
@@ -146,51 +147,48 @@ entry их слушает и блокирует или разблокирует 
 - nginx пересылает в бэкенд `/api`, Swagger (`/swagger-ui`, `/v3/api-docs`) и `/openapi.yaml`. Для браузера сайт и API живут на одном адресе, поэтому CORS не нужен, cookie сессии и CSRF работают без настройки.
 - Любой другой адрес (`/admin/users`, `/cabinet`) nginx отдаёт как `index.html`, экран выбирает React Router.
 - Бэкенд стоит за прокси, поэтому включено `server.forward-headers-strategy: framework`: адрес и схему запроса Spring берёт из заголовков `X-Forwarded-*`.
-- При разработке Docker для клиента не нужен: `npm run dev` поднимает Vite на `localhost:5173` и сам пересылает `/api` на `localhost:8080`.
+- При разработке клиент запускается через `npm run dev`: Vite поднимается на `localhost:5173` и пересылает `/api` на `localhost:8080`.
 
 ## Docker
 
-Три контейнера в `docker-compose.yml` (задача T-05):
+Три сервиса в `docker-compose.yml`:
 
 | Сервис | Образ | Наружу |
 |---|---|---|
-| `frontend` | `frontend/Dockerfile`: Node собирает React, `nginx:stable-alpine` раздаёт | порт 80 |
+| `frontend` | `frontend/Dockerfile`: Node собирает React, nginx раздаёт | порт 80 |
 | `backend` | `app/Dockerfile`: JDK 25 собирает jar через `./mvnw`, JRE 25 запускает. Собирается из корня проекта: Maven нужны `mvnw` и корневой `pom.xml` | только внутри сети Docker |
 | `db` | `postgres:16-alpine`, данные в томе `pg_data` | только внутри сети Docker |
 
-- Сборка идёт внутри Docker, поэтому на чистом компьютере `docker compose up` работает без Java, Maven и Node.
+- Сборка идёт внутри Docker, поэтому на компьютере не нужны Java, Maven и Node.
 - Порядок запуска: база готова (`pg_isready`) → бэкенд готов (`/api/health`) → nginx.
 - Файлы к записям лежат в томе `uploads`, путь передаётся переменной `APP_STORAGE_DIR` (`app.storage.dir`).
-- Пароли — в `.env`, в репозитории только `.env.example`.
-- `docker-compose.override.yml` подключается локально сам: открывает базу на 5432 (для IntelliJ) и бэкенд на 8080, включает профиль `dev`. На стенде запуск без него: `docker compose -f docker-compose.yml up -d --build`.
-- Каждый день: бэкенд — `docker compose up -d db` и запуск из IntelliJ; клиент — `docker compose up -d db backend` и `npm run dev`.
+- Пароли хранятся в `.env`, в репозитории только `.env.example`.
+- `docker-compose.override.yml` используется при локальной работе: открывает порты базы и бэкенда, включает профиль `dev`.
 
 ## Файловая структура
 
-Отметка «план» — файлы, которых в каркасе ещё нет.
-
 ```
 center-metrics/
-├── pom.xml                       родитель: Spring Boot 4.1.2, Java 25, модуль app
-├── mvnw, mvnw.cmd, .mvn/         Maven Wrapper 3.9.16
+├── pom.xml                       родитель: Spring Boot, Java 25, модуль app
+├── mvnw, mvnw.cmd, .mvn/         Maven Wrapper
 ├── .gitignore, .gitattributes
 ├── README.md
-├── docker-compose.yml            frontend, backend, db; план (T-05)
-├── docker-compose.override.yml   локально: порты базы и бэкенда, профиль dev; план
-├── .env.example, .dockerignore   план
-├── .github/                      шаблоны и CI, план
+├── docker-compose.yml            frontend, backend, db
+├── docker-compose.override.yml   локальная работа: порты базы и бэкенда, профиль dev
+├── .env.example, .dockerignore
+├── .github/                      шаблоны и CI
 ├── docs/
-│   ├── TECH_AGREEMENTS.md        PR #123
+│   ├── TECH_AGREEMENTS.md        техсоглашения
 │   ├── ARCHITECTURE.md           этот файл
 │   ├── DATABASE.md               таблицы, колонки, индексы
 │   ├── api.md                    список адресов API
-│   └── adr/
-├── frontend/                     клиент React, PR #126
-│   ├── Dockerfile                Node собирает, nginx раздаёт; план
-│   └── nginx.conf                файлы React и пересылка /api; план
+│   └── adr/                      архитектурные решения
+├── frontend/                     клиент React
+│   ├── Dockerfile                Node собирает, nginx раздаёт
+│   └── конфигурация nginx        файлы React и пересылка /api
 └── app/
     ├── pom.xml
-    ├── Dockerfile                JDK собирает jar, JRE запускает; план
+    ├── Dockerfile                JDK собирает jar, JRE запускает
     └── src/
         ├── main/java/ru/fa/kpi/
         │   ├── KpiApplication.java
@@ -200,46 +198,28 @@ center-metrics/
         │   │   ├── ApiExceptionHandler.java  ошибки в формате ProblemDetail
         │   │   ├── NotFoundException.java, ConflictException.java
         │   │   └── ReportSubmitted.java, ReportReturned.java
-        │   ├── user/          package-info.java; план: User, Role, UserRepository, UserMapper,
-        │   │                  UserController, AuthController, UserRequest, LoginRequest, UserDto, UserService
-        │   ├── indicator/     package-info.java; план: Indicator, Category, репозитории, мапперы,
-        │   │                  контроллеры, IndicatorRequest, CategoryRequest, IndicatorDto, CategoryDto, IndicatorService
-        │   ├── period/        package-info.java; план: Period, PeriodType, PeriodRepository, PeriodMapper,
-        │   │                  PeriodController, PeriodRequest, PeriodDto, PeriodService
-        │   ├── entry/         package-info.java; план: Entry, EntryRepository, EntryMapper, EntryController,
-        │   │                  EntryRequest, EntryDto, EntryService, EntryChanged, ReportEventsListener,
+        │   ├── user/          User, Role, UserRepository, UserMapper, UserController, AuthController,
+        │   │                  UserRequest, LoginRequest, UserDto, UserService
+        │   ├── indicator/     Indicator, Category, репозитории, мапперы, контроллеры,
+        │   │                  IndicatorRequest, CategoryRequest, IndicatorDto, CategoryDto, IndicatorService
+        │   ├── period/        Period, PeriodType, PeriodRepository, PeriodMapper, PeriodController,
+        │   │                  PeriodRequest, PeriodDto, PeriodService
+        │   ├── entry/         Entry, EntryRepository, EntryMapper, EntryController, EntryRequest, EntryDto,
+        │   │                  EntryService, EntryChanged, ReportEventsListener,
         │   │                  attachment/ (Attachment, AttachmentRepository, AttachmentController, FileStorage, AttachmentDto)
-        │   ├── scoring/       package-info.java; план: Score, ScoreRepository, ScoreCalculator,
-        │   │                  EntryChangedListener, ScoreDto, ScoringService
-        │   └── report/        package-info.java; план: Report, ReportStatus, ReportRepository, ReportMapper,
-        │                      ReportController, CabinetController, ReportDto, SummaryRowDto, ControlRowDto,
-        │                      CabinetDto, ReportService
+        │   ├── scoring/       Score, ScoreRepository, ScoreCalculator, EntryChangedListener, ScoreDto, ScoringService
+        │   └── report/        Report, ReportStatus, ReportRepository, ReportMapper, ReportController, CabinetController,
+        │                      ReportDto, SummaryRowDto, ControlRowDto, CabinetDto, ReportService
         ├── main/resources/
         │   ├── application.yml           база из DB_URL, DB_USER, DB_PASSWORD; файлы в APP_STORAGE_DIR
         │   ├── application-dev.yml       локальная база и тестовые данные
-        │   ├── db/migration/             V100__user_create_tables.sql … V600__report_create_tables.sql
-        │   ├── db/seed/                  тестовые данные, план
+        │   ├── db/migration/             миграции Flyway V100–V699
+        │   ├── db/seed/                  тестовые данные
         │   └── static/openapi.yaml       контракт API для Swagger UI
         └── test/java/ru/fa/kpi/
             ├── ModularityTest.java           границы пакетов
             ├── KpiApplicationTests.java      приложение целиком на PostgreSQL в Docker
             ├── TestcontainersConfiguration.java
             ├── common/                       SecurityConfigTest, ApiExceptionHandlerTest
-            └── user/, indicator/, …          план: тесты пакетов
+            └── user/, indicator/, …          тесты пакетов
 ```
-
-## Журнал решений
-
-| Дата | Решение | Почему |
-|---|---|---|
-| 07.11 | Один Maven-модуль `app` вместо модуля на каждый пакет | один запускаемый jar, границы пакетов проверяет Spring Modulith |
-| 07.11 | Три контейнера: nginx с React, Spring Boot, PostgreSQL. Клиент в Maven не входит | фронт и бэк собираются и перезапускаются независимо: правка в CSS не пересобирает Java и не выкидывает пользователей из системы; привычная схема из ShareIt. Заменяет вариант «клиент внутри jar» из ADR-02 |
-| 07.11 | Ручные мапперы вместо MapStruct | так учили на курсе, меньше новых технологий; правило переноса полей выше |
-| 07.11 | События `ReportSubmitted` и `ReportReturned` в `common` | убирают цикл `entry` ↔ `report` |
-| 07.11 | Диапазоны номеров миграций и `out-of-order: true` | пакеты пишут миграции независимо |
-| 07.11 | Кафедра строкой, без `/api/departments`; обязательна только у преподавателя | проще для MVP, на клиенте уже строка; у администратора кафедры нет |
-| 07.11 | Журнал достижений по датам: у записи нет `period_id`, отчёт за период собирается по датам | достижение вносится один раз и попадает во все периоды, куда входит его дата; правка в одном месте |
-| 07.11 | Кабинет по умолчанию: открытый период с сегодняшней датой, из нескольких — самый длинный | при открытых семестре и месяце показываем семестр, как в прототипе |
-| 07.11 | Dockerfile бэкенда и фронта собирают всё внутри Docker | `docker compose up` должен работать на чистом компьютере |
-| 07.11 | `/api/health` через Actuator вместо `HealthController` | меньше своего кода, заодно проверяется база |
-| 07.11 | Фильтры `archived` и `closed` вместо `status` у показателей и периодов | совпадают с полями DTO в `frontend/src/api/types.ts` |
