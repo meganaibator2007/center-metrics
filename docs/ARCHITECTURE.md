@@ -32,7 +32,7 @@
 | `user` | пользователи, роли, вход и выход, смена пароля | `usr_` | V100–V199 |
 | `indicator` | категории, показатели, коэффициент, максимальный балл, архив, поля формы | `ind_` | V200–V299 |
 | `period` | отчётные периоды, проверка пересечения дат, закрытие | `per_` | V300–V399 |
-| `entry` | записи преподавателя и файлы (подпакет `attachment`) | `ent_` | V400–V499 |
+| `entry` | журнал достижений преподавателя по датам и файлы (подпакет `attachment`) | `ent_` | V400–V499 |
 | `scoring` | баллы: значение × коэффициент, но не больше максимума | `scr_` | V500–V599 |
 | `report` | кабинет, отправка отчёта, отчёт преподавателя, сводный отчёт, контроль сдачи | `rep_` | V600–V699 |
 
@@ -43,8 +43,8 @@
 ```
 user    indicator    period          ни от кого, кроме common
    ↑        ↑          ↑
-   └───── entry ───────┘             проверяет: период открыт, отчёт не отправлен
-            │ событие EntrySaved
+   └───── entry ───────┘             проверяет: дата не в закрытом периоде и не в отправленном отчёте
+            │ событие EntryChanged
             ▼
          scoring → indicator, period
             ↑
@@ -68,7 +68,7 @@ entry их слушает и блокирует или разблокирует 
 
 ## События
 
-- `EntrySaved` лежит в `entry`. `scoring` слушает его синхронно (`@EventListener`) в той же транзакции, поэтому баллы обновляются сразу после сохранения записи.
+- `EntryChanged` лежит в `entry` и публикуется при сохранении и при удалении записи. `scoring` слушает его синхронно (`@EventListener`) в той же транзакции и пересчитывает баллы всех открытых периодов, в которые попадает дата записи.
 - `ReportSubmitted` и `ReportReturned` лежат в `common`. Если положить их в `report`, `entry` начал бы зависеть от `report`, а `report` и так зависит от `entry`, получился бы цикл.
 - В событиях передаём только ID и простые значения, не сущности.
 
@@ -98,6 +98,10 @@ entry их слушает и блокирует или разблокирует 
 
 ## База и миграции
 
+Таблицы, колонки и индексы описаны в [DATABASE.md](DATABASE.md).
+
+- **Журнал по датам.** Запись преподавателя не привязана к периоду, у неё есть дата. Отчёт за любой период — записи, дата которых в него входит: статья от 15.10 попадает и в октябрь, и в семестр без повторного ввода. Периоды разных типов могут накладываться, одного типа — нет.
+- Кабинет без `periodId` показывает открытый период, в который попадает сегодняшняя дата; если таких несколько — самый длинный; если ни одного — открытый период с самой поздней датой окончания.
 - Схему меняют только миграции Flyway, `ddl-auto: validate`.
 - Имя файла: `V<номер>__<пакет>_<что_делает>.sql`, между номером и описанием **два** подчёркивания. Например, `V100__user_create_tables.sql`, следующая миграция пакета — `V101__user_add_position.sql`. С одним подчёркиванием Flyway файл не увидит.
 - У каждого пакета свой диапазон номеров (таблица выше). Поэтому включено `spring.flyway.out-of-order: true`: иначе `V101`, добавленная после уже применённой `V600`, не накатится.
@@ -178,6 +182,7 @@ center-metrics/
 ├── docs/
 │   ├── TECH_AGREEMENTS.md        PR #123
 │   ├── ARCHITECTURE.md           этот файл
+│   ├── DATABASE.md               таблицы, колонки, индексы
 │   ├── api.md                    список адресов API
 │   └── adr/
 ├── frontend/                     клиент React, PR #126
@@ -202,17 +207,17 @@ center-metrics/
         │   ├── period/        package-info.java; план: Period, PeriodType, PeriodRepository, PeriodMapper,
         │   │                  PeriodController, PeriodRequest, PeriodDto, PeriodService
         │   ├── entry/         package-info.java; план: Entry, EntryRepository, EntryMapper, EntryController,
-        │   │                  EntryRequest, EntryDto, EntryService, EntrySaved, ReportEventsListener,
+        │   │                  EntryRequest, EntryDto, EntryService, EntryChanged, ReportEventsListener,
         │   │                  attachment/ (Attachment, AttachmentRepository, AttachmentController, FileStorage, AttachmentDto)
         │   ├── scoring/       package-info.java; план: Score, ScoreRepository, ScoreCalculator,
-        │   │                  EntrySavedListener, ScoreDto, ScoringService
+        │   │                  EntryChangedListener, ScoreDto, ScoringService
         │   └── report/        package-info.java; план: Report, ReportStatus, ReportRepository, ReportMapper,
         │                      ReportController, CabinetController, ReportDto, SummaryRowDto, ControlRowDto,
         │                      CabinetDto, ReportService
         ├── main/resources/
         │   ├── application.yml           база из DB_URL, DB_USER, DB_PASSWORD; файлы в APP_STORAGE_DIR
         │   ├── application-dev.yml       локальная база и тестовые данные
-        │   ├── db/migration/             V100__user_create_tables.sql … V600__report_create_tables.sql, план
+        │   ├── db/migration/             V100__user_create_tables.sql … V600__report_create_tables.sql
         │   ├── db/seed/                  тестовые данные, план
         │   └── static/openapi.yaml       контракт API для Swagger UI
         └── test/java/ru/fa/kpi/
@@ -232,7 +237,9 @@ center-metrics/
 | 07.11 | Ручные мапперы вместо MapStruct | так учили на курсе, меньше новых технологий; правило переноса полей выше |
 | 07.11 | События `ReportSubmitted` и `ReportReturned` в `common` | убирают цикл `entry` ↔ `report` |
 | 07.11 | Диапазоны номеров миграций и `out-of-order: true` | пакеты пишут миграции независимо |
-| 07.11 | Кафедра строкой, без `/api/departments` | проще для MVP, на клиенте уже строка |
+| 07.11 | Кафедра строкой, без `/api/departments`; обязательна только у преподавателя | проще для MVP, на клиенте уже строка; у администратора кафедры нет |
+| 07.11 | Журнал достижений по датам: у записи нет `period_id`, отчёт за период собирается по датам | достижение вносится один раз и попадает во все периоды, куда входит его дата; правка в одном месте |
+| 07.11 | Кабинет по умолчанию: открытый период с сегодняшней датой, из нескольких — самый длинный | при открытых семестре и месяце показываем семестр, как в прототипе |
 | 07.11 | Dockerfile бэкенда и фронта собирают всё внутри Docker | `docker compose up` должен работать на чистом компьютере |
 | 07.11 | `/api/health` через Actuator вместо `HealthController` | меньше своего кода, заодно проверяется база |
 | 07.11 | Фильтры `archived` и `closed` вместо `status` у показателей и периодов | совпадают с полями DTO в `frontend/src/api/types.ts` |

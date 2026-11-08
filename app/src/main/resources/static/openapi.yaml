@@ -567,7 +567,10 @@ paths:
     post:
       tags: [Отчётные периоды]
       summary: Создание периода
-      description: Доступ — админ. Периоды одного типа не должны пересекаться по датам.
+      description: |
+        Доступ — админ. Периоды одного типа не должны пересекаться по датам.
+        Разных типов — могут: семестр и октябрь внутри него открыты одновременно,
+        записи журнала попадают в оба по дате.
       operationId: createPeriod
       security:
         - session: []
@@ -671,13 +674,16 @@ paths:
   /api/entries:
     get:
       tags: [Записи и файлы]
-      summary: Свои записи
-      description: Доступ — преподаватель. Только записи текущего пользователя.
+      summary: Журнал своих записей
+      description: |
+        Доступ — преподаватель. Только записи текущего пользователя.
+        Записи не привязаны к периоду: у каждой есть дата `eventDate`. С `periodId` возвращаются
+        записи, дата которых входит в этот период; без него — весь журнал, новые сверху.
       operationId: listEntries
       parameters:
         - name: periodId
           in: query
-          required: true
+          description: Записи с датой внутри периода. Без параметра — весь журнал
           schema:
             type: integer
             format: int64
@@ -704,7 +710,8 @@ paths:
       summary: Создание записи
       description: |
         Доступ — преподаватель. Преподаватель берётся из сессии, не из тела запроса.
-        Баллы пересчитываются сразу, в той же транзакции.
+        Запись попадает в отчёты всех периодов, в которые входит её дата.
+        Баллы этих периодов пересчитываются сразу, в той же транзакции.
       operationId: createEntry
       security:
         - session: []
@@ -729,7 +736,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Показатель или период не найден
+          description: Показатель не найден
           content:
             application/problem+json:
               schema:
@@ -761,7 +768,9 @@ paths:
     put:
       tags: [Записи и файлы]
       summary: Изменение записи
-      description: Доступ — преподаватель, только своя запись. Баллы пересчитываются сразу.
+      description: |
+        Доступ — преподаватель, только своя запись. Если дату поменяли, баллы пересчитываются
+        и в периодах по старой дате, и в периодах по новой — сразу, в той же транзакции.
       operationId: updateEntry
       security:
         - session: []
@@ -912,7 +921,10 @@ paths:
       parameters:
         - name: periodId
           in: query
-          description: Без параметра — текущий открытый период
+          description: |
+            Без параметра — открытый период, в который попадает сегодняшняя дата;
+            если таких несколько (семестр и месяц внутри него) — самый длинный;
+            если ни одного — открытый период с самой поздней датой окончания
           schema:
             type: integer
             format: int64
@@ -928,7 +940,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Открытого периода нет
+          description: Нет ни одного открытого периода
           content:
             application/problem+json:
               schema:
@@ -1358,7 +1370,9 @@ components:
             status: 404
             detail: Запись 15 не найдена
     EntryLocked:
-      description: Период закрыт или отчёт уже отправлен, менять записи нельзя
+      description: |
+        Дата записи (новая или прежняя) попадает в закрытый период или в период,
+        отчёт за который отправлен или принят. Менять такую запись нельзя
       content:
         application/problem+json:
           schema:
@@ -1366,7 +1380,7 @@ components:
           example:
             title: Действие невозможно
             status: 409
-            detail: Отчёт за период отправлен, записи менять нельзя
+            detail: Отчёт за 1 семестр 2026/27 отправлен, записи с датой в этом периоде менять нельзя
 
   schemas:
     ProblemDetail:
@@ -1448,7 +1462,8 @@ components:
       description: |
         Маппер переносит поля по одному. `role` и `password` маппер не копирует:
         роль задаёт сервис после проверки прав, пароль сервис сохраняет как хеш BCrypt.
-      required: [lastName, firstName, login, role, department]
+        Кафедра обязательна только для роли `TEACHER`: без неё ответ 400 с `errors.department`.
+      required: [lastName, firstName, login, role]
       properties:
         lastName:
           type: string
@@ -1469,8 +1484,9 @@ components:
         role:
           $ref: '#/components/schemas/Role'
         department:
-          type: string
+          type: [string, 'null']
           maxLength: 150
+          description: Кафедра. Обязательна для преподавателя, у администратора может быть пустой
         password:
           type: [string, 'null']
           format: password
@@ -1662,8 +1678,10 @@ components:
 
     EntryDto:
       type: object
-      description: Баллов здесь нет, их считает scoring и показывает кабинет.
-      required: [id, indicatorId, periodId, value, fields, attachments, createdAt, updatedAt]
+      description: |
+        Запись журнала. К периоду не привязана: в отчёт попадает по дате.
+        Баллов здесь нет, их считает scoring и показывает кабинет.
+      required: [id, indicatorId, eventDate, value, fields, attachments, createdAt, updatedAt]
       properties:
         id:
           type: integer
@@ -1673,10 +1691,11 @@ components:
           type: integer
           format: int64
           example: 8
-        periodId:
-          type: integer
-          format: int64
-          example: 1
+        eventDate:
+          type: string
+          format: date
+          description: Когда это произошло — дата публикации, окончания курса, выступления
+          example: '2026-10-13'
         value:
           type: number
           description: Количество в единицах показателя
@@ -1703,15 +1722,18 @@ components:
 
     EntryRequest:
       type: object
-      description: Преподаватель берётся из сессии. `id` и баллы из запроса не принимаются.
-      required: [indicatorId, periodId, value]
+      description: |
+        Преподаватель берётся из сессии. `id` и баллы из запроса не принимаются.
+        Периода в запросе нет: запись попадает в отчёты всех периодов, куда входит `eventDate`.
+      required: [indicatorId, eventDate, value]
       properties:
         indicatorId:
           type: integer
           format: int64
-        periodId:
-          type: integer
-          format: int64
+        eventDate:
+          type: string
+          format: date
+          description: Когда это произошло. Не может попадать в закрытый период или в период с отправленным отчётом
         value:
           type: number
           exclusiveMinimum: 0
