@@ -1,0 +1,16 @@
+# Игнорируем папки Гита и настройки редактора
+.git
+.gitignore
+.vscode
+.dockerignore
+README.md
+
+# Локальные секреты
+.env
+
+# Временные файлы сборки Java и фронтенда
+target/
+build/
+.gradle/
+node_modules/
+dist/
