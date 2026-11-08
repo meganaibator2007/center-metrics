@@ -18,11 +18,15 @@ services:
       context: .
       dockerfile: app/Dockerfile
     container_name: center_metrics_backend
+    ports:
+      - "${APP_PORT}:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       APP_STORAGE_DIR: /app/storage
+      ADMIN_LOGIN: ${ADMIN_LOGIN}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     volumes:
       - uploads:/app/storage
     depends_on:
