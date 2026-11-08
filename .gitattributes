@@ -1,0 +1,4 @@
+# mvnw запускается в Linux (CI, Docker), поэтому переводы строк только LF
+/mvnw text eol=lf
+*.sh text eol=lf
+*.cmd text eol=crlf

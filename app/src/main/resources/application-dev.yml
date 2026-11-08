@@ -1,0 +1,14 @@
+# Локальная разработка: запуск с профилем dev (--spring.profiles.active=dev).
+# База PostgreSQL 16 на localhost:5432, значения можно переопределить переменными окружения.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/center_metrics}
+    username: ${DB_USER:center_metrics}
+    password: ${DB_PASSWORD:center_metrics}
+  flyway:
+    # Тестовые данные (T-17) подключаются только в dev
+    locations: classpath:db/migration,classpath:db/seed
+
+logging:
+  level:
+    ru.fa.kpi: debug
