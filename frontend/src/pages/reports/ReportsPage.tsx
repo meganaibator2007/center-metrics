@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router'
 import { listAchievements } from '../../api/achievements'
 import { fileUrl, useMock } from '../../api/client'
 import { listIndicators } from '../../api/indicators'
-import { listEmployees } from '../../api/org'
+import { listEmployees, query } from '../../api/org'
 import { directorDashboard, userScores } from '../../api/scores'
 import { hasRole } from '../../auth/context'
 import { useAuth } from '../../auth/useAuth'
@@ -25,22 +25,12 @@ export function ReportsPage() {
   const [params] = useSearchParams()
   const manager = hasRole(user, 'DIRECTOR', 'ADMIN', 'REVIEWER')
   const type = manager ? (params.get('type') ?? 'individual') : 'individual'
-  const xlsx = fileUrl(`/reports/${type}.xlsx?${params.toString()}`)
 
   return (
     <>
       <PageHead
         title="Отчёты"
         lead="Период, показатели, факты, начисления и доли, статусы и даты решений."
-        actions={
-          useMock ? (
-            <span className="muted">XLSX формирует сервер</span>
-          ) : (
-            <a className="btn btn--outline" href={xlsx} download>
-              Скачать XLSX
-            </a>
-          )
-        }
       />
       {manager && (
         <Tabs
@@ -60,6 +50,19 @@ export function ReportsPage() {
       {type === 'indicator' && <IndicatorReport />}
       {type === 'approval' && <ApprovalReport />}
     </>
+  )
+}
+
+/**
+ * Выгрузка в XLSX с теми параметрами, по которым построен отчёт на экране,
+ * а не с тем, что случайно лежит в адресе (значения по умолчанию в адресе не хранятся)
+ */
+function XlsxLink({ type, params }: { type: string; params: Record<string, string | number | undefined | null> }) {
+  if (useMock) return <p className="muted">XLSX формирует сервер: в режиме заглушек выгрузки нет.</p>
+  return (
+    <a className="btn btn--outline" href={fileUrl(`/reports/${type}.xlsx${query(params)}`)} download>
+      Скачать XLSX
+    </a>
   )
 }
 
@@ -104,6 +107,7 @@ function IndividualReport() {
           </div>
         )}
         <PeriodFilter current={scores.data?.period} />
+        <XlsxLink type="individual" params={{ userId, periodId: scores.data?.period.id }} />
       </div>
       {scores.error ? <ErrorAlert error={scores.error} /> : null}
       {scores.loading && !scores.data && <Loading />}
@@ -182,6 +186,7 @@ function CategoryReport() {
           </select>
         </div>
         <PeriodFilter current={data?.period} />
+        <XlsxLink type="category" params={{ category: current, periodId: data?.period.id }} />
       </div>
       {error ? <ErrorAlert error={error} /> : null}
       {loading && !data && <Loading />}
@@ -207,7 +212,7 @@ function CategoryReport() {
               {(current === 'PPS' ? data.pps.byIndicator : data.aup.byIndicator).map((r) => (
                 <tr key={r.code}>
                   <td>
-                    <Link to={`/reports?type=indicator&code=${r.code}`}>{r.code}</Link>
+                    <Link to={`/reports?type=indicator&code=${r.code}&periodId=${data.period.id}`}>{r.code}</Link>
                     <div className="cell-sub">{r.name}</div>
                   </td>
                   <td className="num">{fmt(r.approved)}</td>
@@ -239,7 +244,7 @@ function CategoryReport() {
                 {data.pps.byEmployee.map((p) => (
                   <tr key={p.userId}>
                     <td>
-                      <Link to={`/reports?userId=${p.userId}`}>{p.fullName}</Link>
+                      <Link to={`/reports?userId=${p.userId}&periodId=${data.period.id}`}>{p.fullName}</Link>
                       <div className="cell-sub">{p.departmentName}</div>
                     </td>
                     <td className="num">{fmt(p.approved)}</td>
@@ -262,6 +267,7 @@ function ProgramReport() {
     <>
       <div className="filters">
         <PeriodFilter current={data?.period} />
+        <XlsxLink type="program" params={{ periodId: data?.period.id }} />
       </div>
       {error ? <ErrorAlert error={error} /> : null}
       {loading && !data && <Loading />}
@@ -281,9 +287,12 @@ function ProgramReport() {
 
 function IndicatorReport() {
   const periodId = usePeriodId()
-  const [code, setCode] = useParam('code')
+  const [indicatorParam, setIndicator] = useParam('indicatorId')
+  const [code] = useParam('code')
   const indicators = useLoad(() => listIndicators({ evaluationType: 'POINTS' }), 'ind-points')
-  const indicator = indicators.data?.find((i) => i.code === code) ?? indicators.data?.[0]
+  // indicatorId по контракту; code — из ссылок свода по категории
+  const indicator =
+    indicators.data?.find((i) => String(i.id) === indicatorParam) ?? indicators.data?.find((i) => i.code === code) ?? indicators.data?.[0]
   const items = useLoad(
     () => (indicator ? listAchievements({ scope: 'registry', indicatorId: indicator.id, periodId }) : Promise.resolve([])),
     `ind-${indicator?.id}-${periodId}`,
@@ -295,15 +304,16 @@ function IndicatorReport() {
           <label className="field__label" htmlFor="code">
             Показатель
           </label>
-          <select id="code" className="select" value={indicator?.code ?? ''} onChange={(e) => setCode(e.target.value)}>
+          <select id="code" className="select" value={indicator?.id ?? ''} onChange={(e) => setIndicator(e.target.value)}>
             {(indicators.data ?? []).map((i) => (
-              <option key={i.id} value={i.code}>
+              <option key={i.id} value={i.id}>
                 {i.code} · {i.name}
               </option>
             ))}
           </select>
         </div>
         <PeriodFilter />
+        <XlsxLink type="indicator" params={{ indicatorId: indicator?.id, periodId }} />
       </div>
       {items.error ? <ErrorAlert error={items.error} /> : null}
       {items.data && <AchievementTable items={items.data} empty="По показателю нет результатов" />}
@@ -319,6 +329,7 @@ function ApprovalReport() {
     <>
       <div className="filters">
         <PeriodFilter />
+        <XlsxLink type="approval" params={{ periodId }} />
       </div>
       {error ? <ErrorAlert error={error} /> : null}
       {loading && !data && <Loading />}

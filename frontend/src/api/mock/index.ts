@@ -17,6 +17,7 @@ import type {
   IndicatorDto,
   IndicatorRequest,
   IndicatorSlice,
+  IndicatorVersionDto,
   LoginRequest,
   MeasurementDto,
   MeasurementRequest,
@@ -24,6 +25,7 @@ import type {
   Page,
   PeriodDto,
   PeriodRequest,
+  Permission,
   PersonShort,
   ResultStatus,
   Role,
@@ -34,13 +36,15 @@ import type {
 import { measure, normalizeIdentifier, normalizeTitle, round, splitPoints } from '../../lib/calc'
 import { seed, type MockDb, type StoredAchievement, type StoredMeasurement } from './data'
 
-const DB_KEY = 'center-metrics-mock-db-v2'
+const DB_KEY = 'center-metrics-mock-db-v3'
 const SESSION_KEY = 'center-metrics-mock-login'
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 
 interface Db extends MockDb {
   audit: AuditEventDto[]
+  /** Прежние редакции показателей: id показателя → редакции */
+  versions: Record<number, IndicatorVersionDto[]>
 }
 
 function load(): Db {
@@ -50,7 +54,7 @@ function load(): Db {
   } catch {
     // Хранилище недоступно — начинаем с демо-данных
   }
-  return { ...structuredClone(seed()), audit: [] }
+  return { ...structuredClone(seed()), audit: [], versions: {} }
 }
 
 let db = load()
@@ -65,7 +69,7 @@ function save() {
 
 /** Сбросить демо-данные к исходным (кнопка на странице входа) */
 export function resetMockData() {
-  db = { ...structuredClone(seed()), audit: [] }
+  db = { ...structuredClone(seed()), audit: [], versions: {} }
   save()
 }
 
@@ -77,6 +81,10 @@ function fail(status: number, title: string, errors?: Record<string, string>): n
 
 function now() {
   return new Date().toISOString()
+}
+
+function today() {
+  return now().slice(0, 10)
 }
 
 function newId() {
@@ -110,6 +118,10 @@ function currentUser(): UserDto {
 
 function has(user: UserDto, ...roles: Role[]) {
   return roles.some((role) => user.roles.includes(role))
+}
+
+function can(user: UserDto, permission: Permission) {
+  return has(user, 'ADMIN') || user.permissions.includes(permission)
 }
 
 function requireRole(user: UserDto, ...roles: Role[]) {
@@ -188,22 +200,28 @@ function isParticipant(user: UserDto, a: StoredAchievement) {
 function inReviewerScope(user: UserDto, a: StoredAchievement) {
   const owner = userById(a.ownerId)
   if (owner.categories.includes('AUP')) return true
-  const programs = new Set(user.programIds)
+  const programs = new Set(user.reviewProgramIds)
   return (a.programId !== null && programs.has(a.programId)) || owner.programIds.some((id) => programs.has(id))
 }
 
-function inReviewQueue(user: UserDto, a: StoredAchievement) {
-  return (
-    has(user, 'REVIEWER') && a.status === 'ON_REVIEW' && a.reviewer === 'ROP' && !isParticipant(user, a) && inReviewerScope(user, a)
-  )
+/** Кто может вызвать /review: РОП своей области или директор, если заявитель сам РОП (ТЗ 2.2, 4.2) */
+function canReview(user: UserDto, a: StoredAchievement) {
+  if (a.status !== 'ON_REVIEW' || isParticipant(user, a)) return false
+  return a.reviewer === 'ROP' ? has(user, 'REVIEWER') && inReviewerScope(user, a) : has(user, 'DIRECTOR')
 }
 
+/** Утвердить может только директор и только после проверки */
+function canApprove(user: UserDto, a: StoredAchievement) {
+  return has(user, 'DIRECTOR') && a.status === 'REVIEWED' && !isParticipant(user, a)
+}
+
+function inReviewQueue(user: UserDto, a: StoredAchievement) {
+  return has(user, 'REVIEWER') && a.reviewer === 'ROP' && canReview(user, a)
+}
+
+/** Очередь директора: проверить результаты самих РОП и утвердить проверенное */
 function inApprovalQueue(user: UserDto, a: StoredAchievement) {
-  return (
-    has(user, 'DIRECTOR') &&
-    !isParticipant(user, a) &&
-    (a.status === 'REVIEWED' || (a.status === 'ON_REVIEW' && a.reviewer === 'DIRECTOR'))
-  )
+  return has(user, 'DIRECTOR') && (canApprove(user, a) || (a.reviewer === 'DIRECTOR' && canReview(user, a)))
 }
 
 function canView(user: UserDto, a: StoredAchievement) {
@@ -232,6 +250,7 @@ function toAchievement(a: StoredAchievement): AchievementDto {
     indicatorCode: indicator.code,
     indicatorName: indicator.name,
     category: indicator.category,
+    achievementType: indicator.achievementType ?? 'OTHER',
     periodId: period.id,
     periodName: period.name,
     title: a.title,
@@ -242,6 +261,7 @@ function toAchievement(a: StoredAchievement): AchievementDto {
     programName: program ? `${program.code} ${program.name}` : null,
     discipline: a.discipline,
     description: a.description,
+    quantity: a.quantity ?? null,
     owner: short(owner),
     enteredBy: a.enteredBy,
     basis: a.basis,
@@ -257,6 +277,7 @@ function toAchievement(a: StoredAchievement): AchievementDto {
     coefficient: indicator.coefficient,
     status: a.status,
     reviewer: a.reviewer,
+    possibleDuplicate: findDuplicates(a, a.id).length > 0,
     lastComment: a.lastComment,
     evidence: a.evidence,
     history: a.history,
@@ -266,20 +287,26 @@ function toAchievement(a: StoredAchievement): AchievementDto {
   }
 }
 
+/** Строгие ключи — DOI и номер документа; URL идентифицирует объект ненадёжно (ТЗ 5.2, шаг 2) */
+const STRICT_KEYS = ['DOI', 'DOC_NUMBER']
+
 function findDuplicates(
-  data: { indicatorId: number; identifier: string | null; title: string; eventDate: string },
+  data: { indicatorId: number; identifierType: string | null; identifier: string | null; title: string; eventDate: string },
   excludeId: number | null,
 ): DuplicateDto[] {
-  const identifier = data.identifier ? normalizeIdentifier(data.identifier) : null
+  const identifier = data.identifier && data.identifierType ? normalizeIdentifier(data.identifier) : null
+  const strictKey = data.identifierType !== null && STRICT_KEYS.includes(data.identifierType)
   const title = normalizeTitle(data.title)
   const result: DuplicateDto[] = []
   for (const a of db.achievements) {
     if (a.id === excludeId || a.status === 'REJECTED') continue
-    const strict = identifier !== null && a.identifier !== null && normalizeIdentifier(a.identifier) === identifier
+    const sameIdentifier = identifier !== null && a.identifier !== null && normalizeIdentifier(a.identifier) === identifier
+    const strict = sameIdentifier && strictKey && a.identifierType === data.identifierType
     const similar =
       !strict &&
-      title.length > 0 &&
-      (normalizeTitle(a.title) === title || (a.indicatorId === data.indicatorId && a.eventDate === data.eventDate))
+      (sameIdentifier ||
+        (title.length > 0 &&
+          (normalizeTitle(a.title) === title || (a.indicatorId === data.indicatorId && a.eventDate === data.eventDate))))
     if (strict || similar) {
       result.push({
         achievementId: a.id,
@@ -301,7 +328,7 @@ function validateAchievement(user: UserDto, body: AchievementRequest, existing: 
   const period = db.periods.find((p) => p.id === body.periodId)
   let owner = user
   if (body.ownerId !== null && body.ownerId !== user.id) {
-    if (!has(user, 'ADMIN', 'REVIEWER')) fail(403, 'Вводить результаты за другого сотрудника может только уполномоченный пользователь')
+    if (!can(user, 'ENTER_FOR_OTHERS')) fail(403, 'Вводить результаты за другого сотрудника может админ или пользователь с полномочием ENTER_FOR_OTHERS')
     owner = userById(body.ownerId)
     if (!body.basis?.trim()) errors.basis = 'Укажите основание административного ввода'
   } else if (existing) {
@@ -311,6 +338,8 @@ function validateAchievement(user: UserDto, body: AchievementRequest, existing: 
   if (!indicator || indicator.archived) errors.indicatorId = 'Выберите показатель'
   else if (indicator.evaluationType !== 'POINTS') errors.indicatorId = 'Целевые показатели РОП вносятся на странице «Целевые показатели»'
   else if (!owner.categories.includes(indicator.category)) errors.indicatorId = 'Показатель не относится к категории оценки сотрудника'
+  else if (indicator.category === 'AUP' && owner.id === user.id && !user.permissions.includes('AUP_SELF_ENTRY'))
+    errors.indicatorId = 'Результаты АУП вносит уполномоченный пользователь по данным РОП (ТЗ 4.2)'
   if (!period) errors.periodId = 'Выберите отчётный период'
   else if (period.closed) errors.periodId = 'Период закрыт: изменения только через процедуру пересмотра'
   if (!body.title.trim()) errors.title = 'Введите наименование'
@@ -350,6 +379,7 @@ function applyRequest(target: StoredAchievement, body: AchievementRequest, owner
   target.programId = body.programId
   target.discipline = body.discipline?.trim() || null
   target.description = body.description?.trim() || null
+  target.quantity = body.quantity ?? null
   target.participants = [
     { userId: owner.id, fullName: owner.fullName, weight: target.participants[0]?.weight ?? 1 },
     ...body.coauthors.map((c) => ({
@@ -477,8 +507,12 @@ function toMeasurement(m: StoredMeasurement): MeasurementDto {
     numerator: m.numerator,
     denominator: m.denominator,
     ...calc,
+    scale: m.scale,
     source: m.source,
+    documentBasis: m.documentBasis,
     status: m.status,
+    lastComment: m.lastComment,
+    version: m.version,
     enteredBy: m.enteredBy,
     updatedAt: m.updatedAt,
   }
@@ -491,7 +525,7 @@ function measurementById(id: number) {
 }
 
 function canEditMeasurement(user: UserDto, programId: number) {
-  return has(user, 'ADMIN') || (has(user, 'REVIEWER') && user.programIds.includes(programId))
+  return has(user, 'ADMIN') || (has(user, 'REVIEWER') && user.reviewProgramIds.includes(programId))
 }
 
 function saveMeasurement(user: UserDto, body: MeasurementRequest, existing: StoredMeasurement | null) {
@@ -500,7 +534,8 @@ function saveMeasurement(user: UserDto, body: MeasurementRequest, existing: Stor
   const errors: Record<string, string> = {}
   if (indicator.evaluationType !== 'TARGET') errors.indicatorId = 'Это не целевой показатель'
   if (period.closed) errors.periodId = 'Период закрыт'
-  if (!canEditMeasurement(user, body.programId)) fail(403, 'Можно вносить данные только по своей образовательной программе')
+  if (!db.programs.some((p) => p.id === body.programId)) errors.programId = 'Выберите образовательную программу'
+  else if (!canEditMeasurement(user, body.programId)) fail(403, 'Можно вносить данные только по своей образовательной программе')
   if (indicator.percent) {
     if (body.numerator === null || body.numerator < 0) errors.numerator = 'Введите числитель'
     if (body.denominator === null || body.denominator < 0) errors.denominator = 'Введите знаменатель'
@@ -515,7 +550,7 @@ function saveMeasurement(user: UserDto, body: MeasurementRequest, existing: Stor
   if (duplicate) fail(409, 'За этот период по этой программе значение уже внесено — откройте его и исправьте')
   if (Object.keys(errors).length > 0) fail(400, 'Проверьте поля формы', errors)
 
-  const target = existing ?? ({ id: newId(), status: 'DRAFT' } as StoredMeasurement)
+  const target = existing ?? ({ id: newId(), status: 'DRAFT', lastComment: null, version: 1 } as StoredMeasurement)
   Object.assign(target, {
     indicatorId: body.indicatorId,
     periodId: body.periodId,
@@ -524,6 +559,8 @@ function saveMeasurement(user: UserDto, body: MeasurementRequest, existing: Stor
     numerator: indicator.percent ? body.numerator : null,
     denominator: indicator.percent ? body.denominator : null,
     source: body.source?.trim() || null,
+    scale: body.scale?.trim() || null,
+    documentBasis: body.documentBasis?.trim() || null,
     enteredBy: user.fullName,
     updatedAt: now(),
   })
@@ -689,7 +726,8 @@ function saveUser(actor: UserDto, body: UserRequest, existing: UserDto | null): 
   else if (db.users.some((u) => u.login === login && u.id !== existing?.id)) errors.login = 'Такой логин уже занят'
   if (body.roles.length === 0) errors.roles = 'Выберите хотя бы одну роль'
   if (body.roles.includes('EMPLOYEE') && body.categories.length === 0) errors.categories = 'Сотруднику нужна категория оценки'
-  if (body.roles.includes('REVIEWER') && body.programIds.length === 0) errors.programIds = 'Укажите программы, которые проверяет РОП'
+  if (body.roles.includes('REVIEWER') && (body.reviewProgramIds ?? []).length === 0)
+    errors.reviewProgramIds = 'Укажите программы, которые проверяет РОП'
   if (!existing && (!body.password || body.password.length < 8)) errors.password = 'Временный пароль — не короче 8 символов'
   if (Object.keys(errors).length > 0) fail(400, 'Проверьте поля формы', errors)
   const middleName = body.middleName?.trim() || null
@@ -700,13 +738,19 @@ function saveUser(actor: UserDto, body: UserRequest, existing: UserDto | null): 
     firstName: body.firstName.trim(),
     middleName,
     fullName: [body.lastName.trim(), body.firstName.trim(), middleName].filter(Boolean).join(' '),
+    externalId: body.externalId?.trim() || existing?.externalId || null,
     roles: body.roles,
     categories: body.categories,
+    permissions: body.permissions ?? [],
     departmentId: body.departmentId,
     departmentName: db.departments.find((d) => d.id === body.departmentId)?.name ?? null,
+    managerId: body.managerId ?? null,
     position: body.position?.trim() || null,
     programIds: body.programIds,
+    reviewProgramIds: body.roles.includes('REVIEWER') ? (body.reviewProgramIds ?? []) : [],
     active: existing?.active ?? true,
+    // Новому сотруднику выдан временный пароль — после входа его нужно сменить
+    mustChangePassword: existing?.mustChangePassword ?? true,
   }
   if (existing) Object.assign(existing, data)
   else db.users.push(data)
@@ -716,6 +760,28 @@ function saveUser(actor: UserDto, body: UserRequest, existing: UserDto | null): 
 
 route('POST', '/users', ({ body }) => saveUser(currentUser(), body as UserRequest, null))
 route('PUT', '/users/{id}', ({ body, ids }) => saveUser(currentUser(), body as UserRequest, userById(ids[0])))
+route('POST', '/users/{id}/reset-password', ({ body, ids }) => {
+  const actor = currentUser()
+  requireRole(actor, 'ADMIN')
+  const password = (body as { password?: string }).password ?? ''
+  if (password.length < 8) fail(400, 'Проверьте поля формы', { password: 'Временный пароль — не короче 8 символов' })
+  const user = userById(ids[0])
+  user.mustChangePassword = true
+  audit(actor, 'PASSWORD_RESET', `Пользователь ${user.login}`)
+  return undefined
+})
+route('POST', '/auth/password', ({ body }) => {
+  const user = currentUser()
+  const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string }
+  const errors: Record<string, string> = {}
+  if (!currentPassword) errors.currentPassword = 'Введите текущий пароль'
+  if (!newPassword || newPassword.length < 8) errors.newPassword = 'Новый пароль — не короче 8 символов'
+  else if (newPassword === currentPassword) errors.newPassword = 'Новый пароль должен отличаться от текущего'
+  if (Object.keys(errors).length > 0) fail(400, 'Проверьте поля формы', errors)
+  user.mustChangePassword = false
+  audit(user, 'PASSWORD_CHANGED', `Пользователь ${user.login}`)
+  return undefined
+})
 route('PATCH', '/users/{id}/active', ({ body, ids }) => {
   const actor = currentUser()
   requireRole(actor, 'ADMIN')
@@ -739,6 +805,14 @@ route('GET', '/indicators', ({ params }) => {
   )
 })
 route('GET', '/indicators/{id}', ({ ids }) => (currentUser(), indicatorById(ids[0])))
+route('GET', '/indicators/{id}/versions', ({ ids }) => {
+  currentUser()
+  const { id: _id, code: _code, archived: _archived, ...current } = indicatorById(ids[0])
+  void _id
+  void _code
+  void _archived
+  return [...(db.versions[ids[0]] ?? []), { ...current, createdAt: now() }]
+})
 
 function saveIndicator(actor: UserDto, body: IndicatorRequest, existing: IndicatorDto | null): IndicatorDto {
   requireRole(actor, 'ADMIN')
@@ -749,8 +823,23 @@ function saveIndicator(actor: UserDto, body: IndicatorRequest, existing: Indicat
   if (body.evaluationType === 'POINTS' && !(Number(body.basePoints) > 0)) errors.basePoints = 'Базовый балл больше нуля'
   if (body.evaluationType === 'TARGET' && !(Number(body.targetValue) > 0)) errors.targetValue = 'Целевое значение больше нуля'
   if (!(body.coefficient > 0)) errors.coefficient = 'Коэффициент больше нуля'
+  // Категория задаёт тип оценки: ППС и АУП — баллы, РОП — цели (ТЗ 1.3, п. 5)
+  if ((body.category === 'ROP') !== (body.evaluationType === 'TARGET'))
+    errors.evaluationType = 'У РОП — целевые значения, у ППС и АУП — баллы'
+  if (body.evaluationType === 'POINTS' && !body.achievementType) errors.achievementType = 'Выберите вид достижения'
+  if (body.evaluationType === 'POINTS' && (body.direction !== null || body.targetValue !== null))
+    errors.evaluationType = 'У балльного показателя нет цели и направления'
+  if (body.evaluationType === 'TARGET' && (body.accrualMethod !== null || body.achievementType !== null || body.basePoints !== null))
+    errors.evaluationType = 'У целевого показателя нет балла, порядка начисления и вида достижения'
   if (Object.keys(errors).length > 0) fail(400, 'Проверьте поля формы', errors)
   const points = body.evaluationType === 'POINTS'
+  if (existing) {
+    const { id: _id, code: _code, archived: _archived, ...previous } = existing
+    void _id
+    void _code
+    void _archived
+    db.versions[existing.id] = [...(db.versions[existing.id] ?? []), { ...previous, validTo: today(), createdAt: now() }]
+  }
   const data: IndicatorDto = {
     id: existing?.id ?? newId(),
     code: body.code.trim(),
@@ -760,6 +849,7 @@ function saveIndicator(actor: UserDto, body: IndicatorRequest, existing: Indicat
     unit: body.unit.trim() || 'шт.',
     basePoints: points ? body.basePoints : null,
     accrualMethod: points ? (body.accrualMethod ?? 'INDIVIDUAL') : null,
+    achievementType: points ? body.achievementType : null,
     targetValue: points ? null : body.targetValue,
     percent: points ? false : body.percent,
     direction: points ? null : (body.direction ?? 'AT_LEAST'),
@@ -768,8 +858,13 @@ function saveIndicator(actor: UserDto, body: IndicatorRequest, existing: Indicat
     maxRepeats: body.maxRepeats,
     requiresProgram: body.requiresProgram,
     evidence: body.evidence.trim(),
+    methodology: body.methodology?.trim() || null,
+    required: body.required,
+    evidenceRequired: body.evidenceRequired,
     // Новая редакция: утверждённые результаты считаются по своей версии (ТЗ 3.2)
     version: existing ? existing.version + 1 : 1,
+    validFrom: body.validFrom || today(),
+    validTo: null,
     archived: existing?.archived ?? false,
   }
   if (existing) Object.assign(existing, data)
@@ -818,8 +913,9 @@ route('POST', '/periods/{id}/close', ({ ids }) => {
   return period
 })
 route('POST', '/periods/{id}/reopen', ({ ids, body }) => {
+  // Переоткрытие закрытого периода — решение директора (ТЗ 4.3)
   const actor = currentUser()
-  requireRole(actor, 'ADMIN')
+  requireRole(actor, 'DIRECTOR')
   const comment = requireComment(body)
   const period = periodById(ids[0])
   period.closed = false
@@ -837,7 +933,7 @@ route('GET', '/achievements/{id}', ({ ids }) => {
 })
 route('POST', '/achievements/check-duplicates', ({ body }) => {
   currentUser()
-  const b = body as { indicatorId: number; identifier: string | null; title: string; eventDate: string; excludeId: number | null }
+  const b = body as { indicatorId: number; identifierType: string | null; identifier: string | null; title: string; eventDate: string; excludeId: number | null }
   return findDuplicates(b, b.excludeId)
 })
 route('POST', '/achievements', ({ body }) => {
@@ -893,14 +989,17 @@ route('POST', '/achievements/{id}/evidence', ({ body, ids }) => {
   if (body instanceof FormData) {
     const file = body.get('file')
     const docType = String(body.get('docType') ?? '').trim()
+    const requisites = String(body.get('requisites') ?? '').trim() || null
+    if (!docType) fail(400, 'Укажите тип документа', { docType: 'Укажите тип документа' })
     if (!(file instanceof File)) fail(400, 'Выберите файл', { file: 'Выберите файл' })
     if (!FILE_TYPES.includes(file.type)) fail(400, 'Допустимы только PDF, JPG и PNG', { file: 'Допустимы только PDF, JPG и PNG' })
     if (file.size > MAX_FILE_SIZE) fail(400, 'Файл больше 10 МБ', { file: 'Файл больше 10 МБ' })
-    item = { id: newId(), docType: docType || 'Подтверждающий документ', fileName: file.name, size: file.size, url: null, uploadedAt: now(), uploadedBy: user.fullName }
+    item = { id: newId(), docType, requisites, fileName: file.name, size: file.size, url: null, version: 1, uploadedAt: now(), uploadedBy: user.fullName }
   } else {
-    const { docType, url } = body as { docType: string; url: string }
+    const { docType, url, requisites } = body as { docType: string; url: string; requisites: string | null }
+    if (!docType?.trim()) fail(400, 'Укажите тип документа', { docType: 'Укажите тип документа' })
     if (!/^https?:\/\/\S+$/.test(url?.trim() ?? '')) fail(400, 'Введите ссылку, начиная с https://', { url: 'Введите ссылку, начиная с https://' })
-    item = { id: newId(), docType: docType?.trim() || 'Ссылка', fileName: null, size: null, url: url.trim(), uploadedAt: now(), uploadedBy: user.fullName }
+    item = { id: newId(), docType: docType.trim(), requisites: requisites?.trim() || null, fileName: null, size: null, url: url.trim(), version: 1, uploadedAt: now(), uploadedBy: user.fullName }
   }
   a.evidence.push(item)
   a.updatedAt = now()
@@ -919,7 +1018,8 @@ route('POST', '/achievements/{id}/submit', ({ ids }) => {
   if (!canEdit(user, a)) fail(409, 'Отправить можно черновик или возвращённое достижение')
   const indicator = indicatorById(a.indicatorId)
   if (periodById(a.periodId).closed) fail(409, 'Период закрыт')
-  if (a.evidence.length === 0) fail(400, 'Приложите хотя бы один подтверждающий документ', { evidence: indicator.evidence })
+  if (indicator.evidenceRequired && a.evidence.length === 0)
+    fail(400, 'Приложите хотя бы один подтверждающий документ', { evidence: indicator.evidence })
   if (indicator.requiresProgram && a.programId === null) fail(400, 'Для этого показателя нужна образовательная программа')
   const strict = findDuplicates(a, a.id).find((d) => d.match === 'STRICT')
   if (strict) fail(409, `Достижение с таким идентификатором уже зарегистрировано (#${strict.achievementId})`)
@@ -933,7 +1033,7 @@ route('POST', '/achievements/{id}/submit', ({ ids }) => {
 route('POST', '/achievements/{id}/review', ({ ids, body }) => {
   const user = currentUser()
   const a = achievementById(ids[0])
-  if (!inReviewQueue(user, a)) fail(403, 'Достижение не в вашей очереди проверки')
+  if (!canReview(user, a)) fail(a.status === 'ON_REVIEW' ? 403 : 409, 'Проверить может РОП своей области, а результаты самих РОП — директор')
   a.status = 'REVIEWED'
   decide(a, user, 'REVIEWED', (body as { comment?: string } | undefined)?.comment?.trim() || null)
   return toAchievement(a)
@@ -941,7 +1041,7 @@ route('POST', '/achievements/{id}/review', ({ ids, body }) => {
 route('POST', '/achievements/{id}/return', ({ ids, body }) => {
   const user = currentUser()
   const a = achievementById(ids[0])
-  if (!inReviewQueue(user, a) && !inApprovalQueue(user, a)) fail(403, 'Вернуть может проверяющий РОП или директор')
+  if (!canReview(user, a) && !canApprove(user, a)) fail(403, 'Вернуть может проверяющий РОП или директор')
   const comment = requireComment(body)
   a.status = 'RETURNED'
   a.lastComment = comment
@@ -951,7 +1051,7 @@ route('POST', '/achievements/{id}/return', ({ ids, body }) => {
 route('POST', '/achievements/{id}/reject', ({ ids, body }) => {
   const user = currentUser()
   const a = achievementById(ids[0])
-  if (!inReviewQueue(user, a) && !inApprovalQueue(user, a)) fail(403, 'Отклонить может проверяющий РОП или директор')
+  if (!canReview(user, a) && !canApprove(user, a)) fail(403, 'Отклонить может проверяющий РОП или директор')
   const comment = requireComment(body)
   a.status = 'REJECTED'
   a.lastComment = comment
@@ -962,7 +1062,7 @@ route('POST', '/achievements/{id}/approve', ({ ids, body }) => {
   const user = currentUser()
   const a = achievementById(ids[0])
   if (isParticipant(user, a)) fail(403, 'Нельзя утверждать собственное достижение')
-  if (!inApprovalQueue(user, a)) fail(403, 'Утвердить может только директор после проверки')
+  if (!canApprove(user, a)) fail(a.status === 'REVIEWED' ? 403 : 409, 'Утвердить можно только проверенное достижение (статус REVIEWED)')
   a.status = 'APPROVED'
   a.lastComment = null
   decide(a, user, 'APPROVED', (body as { comment?: string } | undefined)?.comment?.trim() || null)
@@ -1017,7 +1117,7 @@ route('GET', '/measurements', ({ params }) => {
   const periodId = params.get('periodId')
   const programId = params.get('programId')
   return db.measurements
-    .filter((m) => has(user, 'ADMIN', 'DIRECTOR') || user.programIds.includes(m.programId))
+    .filter((m) => has(user, 'ADMIN', 'DIRECTOR') || user.reviewProgramIds.includes(m.programId))
     .filter((m) => (!periodId || m.periodId === Number(periodId)) && (!programId || m.programId === Number(programId)))
     .map(toMeasurement)
 })
@@ -1032,24 +1132,31 @@ route('POST', '/measurements/{id}/submit', ({ ids }) => {
   const user = currentUser()
   const m = measurementById(ids[0])
   if (!canEditMeasurement(user, m.programId) || !EDITABLE.includes(m.status)) fail(409, 'Отправить можно только черновик')
-  // Результаты РОП проверяет и утверждает директор (ТЗ 4.2)
-  m.status = 'REVIEWED'
+  // Значения РОП проверяет и утверждает директор, двумя отдельными решениями (ТЗ 4.2)
+  m.status = 'ON_REVIEW'
+  m.lastComment = null
   m.updatedAt = now()
   audit(user, 'SUBMITTED', `Измерение ${indicatorById(m.indicatorId).code}`)
   return toMeasurement(m)
 })
-for (const [action, status] of [
-  ['approve', 'APPROVED'],
-  ['return', 'RETURNED'],
-  ['reject', 'REJECTED'],
-] as const) {
+const MEASUREMENT_ROUTE: Array<[string, ResultStatus[], ResultStatus, boolean]> = [
+  // действие, из каких статусов, в какой, нужен ли комментарий
+  ['review', ['ON_REVIEW'], 'REVIEWED', false],
+  ['approve', ['REVIEWED'], 'APPROVED', false],
+  ['return', ['ON_REVIEW', 'REVIEWED'], 'RETURNED', true],
+  ['reject', ['ON_REVIEW', 'REVIEWED'], 'REJECTED', true],
+  ['revision', ['APPROVED'], 'REVISION', true],
+]
+for (const [action, from, status, needsComment] of MEASUREMENT_ROUTE) {
   route('POST', `/measurements/{id}/${action}`, ({ ids, body }) => {
     const user = currentUser()
     requireRole(user, 'DIRECTOR')
     const m = measurementById(ids[0])
-    if (m.status !== 'REVIEWED') fail(409, 'Значение не на утверждении')
-    const comment = action === 'approve' ? null : requireComment(body)
+    if (!from.includes(m.status)) fail(409, `Действие недоступно в статусе ${m.status}`)
+    const comment = needsComment ? requireComment(body) : null
     m.status = status
+    if (needsComment) m.lastComment = comment
+    if (status === 'REVISION') m.version += 1
     m.updatedAt = now()
     audit(user, status, `Измерение ${indicatorById(m.indicatorId).code}`, comment)
     return toMeasurement(m)

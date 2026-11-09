@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
-import { createIndicator, getIndicator, listIndicators, toggleArchive, updateIndicator } from '../../api/indicators'
-import type { AccrualMethod, Category, EvaluationType, IndicatorDto, IndicatorRequest } from '../../api/types'
+import { createIndicator, getIndicator, indicatorVersions, listIndicators, toggleArchive, updateIndicator } from '../../api/indicators'
+import type { AccrualMethod, AchievementType, Category, IndicatorDto, IndicatorRequest, TargetDirection } from '../../api/types'
 import { PageHead } from '../../components/PageHead'
 import { Alert, Badge, Breadcrumbs, ErrorAlert, Field, Loading, Tabs } from '../../components/ui'
 import { fieldErrors } from '../../lib/errors'
-import { fmt } from '../../lib/format'
-import { ACCRUAL_LABEL, CATEGORY_FULL, CATEGORY_LABEL } from '../../lib/labels'
+import { fmt, fmtDate } from '../../lib/format'
+import { ACCRUAL_LABEL, ACHIEVEMENT_TYPE_LABEL, CATEGORY_FULL, CATEGORY_LABEL } from '../../lib/labels'
 import { useLoad } from '../../lib/useLoad'
 
 /** Справочник показателей (ФР-02): правила хранятся как данные, изменение создаёт новую редакцию */
@@ -117,6 +117,7 @@ function IndicatorForm({ initial }: { initial: IndicatorDto | null }) {
     unit: initial?.unit ?? 'шт.',
     basePoints: initial?.basePoints ?? null,
     accrualMethod: initial?.accrualMethod ?? 'INDIVIDUAL',
+    achievementType: initial?.achievementType ?? null,
     targetValue: initial?.targetValue ?? null,
     percent: initial?.percent ?? false,
     direction: initial?.direction ?? 'AT_LEAST',
@@ -125,18 +126,27 @@ function IndicatorForm({ initial }: { initial: IndicatorDto | null }) {
     maxRepeats: initial?.maxRepeats ?? null,
     requiresProgram: initial?.requiresProgram ?? false,
     evidence: initial?.evidence ?? '',
+    methodology: initial?.methodology ?? null,
+    required: initial?.required ?? false,
+    evidenceRequired: initial?.evidenceRequired ?? true,
+    validFrom: null,
   })
   const [error, setError] = useState<unknown>(null)
   const errors = fieldErrors(error)
-  const points = form.evaluationType === 'POINTS'
+  // Тип оценки следует из категории: ППС и АУП — баллы, РОП — целевые значения (ТЗ 1.3, п. 5)
+  const points = form.category !== 'ROP'
   const num = (v: string) => (v === '' ? null : Number(v.replace(',', '.')))
 
   async function save(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    // Поля другого типа очищаем: сервер проверяет это ограничением ind_indicator_version_fields_ck
+    const body: IndicatorRequest = points
+      ? { ...form, evaluationType: 'POINTS', targetValue: null, direction: null, percent: false }
+      : { ...form, evaluationType: 'TARGET', basePoints: null, accrualMethod: null, achievementType: null }
     try {
-      if (initial) await updateIndicator(initial.id, form)
-      else await createIndicator(form)
+      if (initial) await updateIndicator(initial.id, body)
+      else await createIndicator(body)
       navigate(`/admin/indicators${form.category === 'PPS' ? '' : `?category=${form.category}`}`)
     } catch (err) {
       setError(err)
@@ -146,14 +156,17 @@ function IndicatorForm({ initial }: { initial: IndicatorDto | null }) {
   return (
     <>
       <Breadcrumbs items={[{ to: '/admin/indicators', label: 'Справочник показателей' }, { label: initial ? initial.code : 'Новый показатель' }]} />
-      <PageHead title={initial ? `${initial.code}: изменение` : 'Новый показатель'} lead={initial ? `Сохранение создаст редакцию ${initial.version + 1}.` : undefined} />
+      <PageHead
+        title={initial ? `${initial.code}: изменение` : 'Новый показатель'}
+        lead={initial ? `Сохранение создаст редакцию ${initial.version + 1}; утверждённые результаты останутся по прежней.` : undefined}
+      />
       {error && !Object.keys(errors).length ? <ErrorAlert error={error} /> : null}
       <form className="form" onSubmit={save} noValidate>
         <div className="form-row form-row--3">
           <Field id="code" label="Код" required error={errors.code}>
             <input id="code" className="input" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
           </Field>
-          <Field id="category" label="Категория оценки" required>
+          <Field id="category" label="Категория оценки" required error={errors.evaluationType} hint={points ? 'Тип оценки: баллы' : 'Тип оценки: целевое значение'}>
             <select id="category" className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as Category })}>
               {(['PPS', 'AUP', 'ROP'] as const).map((c) => (
                 <option key={c} value={c}>
@@ -162,66 +175,97 @@ function IndicatorForm({ initial }: { initial: IndicatorDto | null }) {
               ))}
             </select>
           </Field>
-          <Field id="type" label="Тип оценки" required>
-            <select id="type" className="select" value={form.evaluationType} onChange={(e) => setForm({ ...form, evaluationType: e.target.value as EvaluationType })}>
-              <option value="POINTS">Баллы</option>
-              <option value="TARGET">Целевое значение</option>
-            </select>
+          <Field id="unit" label="Единица измерения">
+            <input id="unit" className="input" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
           </Field>
         </div>
         <Field id="name" label="Полное наименование" required error={errors.name}>
           <textarea id="name" className="textarea" rows={2} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </Field>
         {points ? (
-          <div className="form-row form-row--3">
-            <Field id="basePoints" label="Базовый балл B" required error={errors.basePoints}>
-              <input id="basePoints" type="number" step="any" className="input" value={form.basePoints ?? ''} onChange={(e) => setForm({ ...form, basePoints: num(e.target.value) })} />
-            </Field>
-            <Field id="accrual" label="Порядок начисления" required>
-              <select id="accrual" className="select" value={form.accrualMethod ?? 'INDIVIDUAL'} onChange={(e) => setForm({ ...form, accrualMethod: e.target.value as AccrualMethod })}>
-                <option value="INDIVIDUAL">Индивидуально</option>
-                <option value="SHARED">На всех авторов</option>
-              </select>
-            </Field>
-            <Field id="maxPoints" label="Максимум за период" hint="Пусто — без ограничения">
-              <input id="maxPoints" type="number" step="any" className="input" value={form.maxPoints ?? ''} onChange={(e) => setForm({ ...form, maxPoints: num(e.target.value) })} />
-            </Field>
-          </div>
+          <>
+            <div className="form-row form-row--3">
+              <Field id="basePoints" label="Базовый балл B" required error={errors.basePoints}>
+                <input id="basePoints" type="number" step="any" className="input" value={form.basePoints ?? ''} onChange={(e) => setForm({ ...form, basePoints: num(e.target.value) })} />
+              </Field>
+              <Field id="accrual" label="Порядок начисления" required>
+                <select id="accrual" className="select" value={form.accrualMethod ?? 'INDIVIDUAL'} onChange={(e) => setForm({ ...form, accrualMethod: e.target.value as AccrualMethod })}>
+                  <option value="INDIVIDUAL">Индивидуально</option>
+                  <option value="SHARED">На всех авторов</option>
+                </select>
+              </Field>
+              <Field id="achievementType" label="Вид достижения" required error={errors.achievementType} hint="По нему ищутся повторы">
+                <select
+                  id="achievementType"
+                  className="select"
+                  value={form.achievementType ?? ''}
+                  onChange={(e) => setForm({ ...form, achievementType: (e.target.value || null) as AchievementType | null })}
+                >
+                  <option value="">Выберите вид</option>
+                  {(Object.keys(ACHIEVEMENT_TYPE_LABEL) as AchievementType[]).map((t) => (
+                    <option key={t} value={t}>
+                      {ACHIEVEMENT_TYPE_LABEL[t]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="form-row form-row--3">
+              <Field id="coefficient" label="Коэффициент c" error={errors.coefficient} hint="По умолчанию 1 (ТЗ 6.2)">
+                <input id="coefficient" type="number" step="any" className="input" value={form.coefficient} onChange={(e) => setForm({ ...form, coefficient: Number(e.target.value) })} />
+              </Field>
+              <Field id="maxPoints" label="Максимум за период" hint="Пусто — без ограничения">
+                <input id="maxPoints" type="number" step="any" className="input" value={form.maxPoints ?? ''} onChange={(e) => setForm({ ...form, maxPoints: num(e.target.value) })} />
+              </Field>
+              <Field id="maxRepeats" label="Допустимое число повторений" hint="Пусто — без ограничения">
+                <input id="maxRepeats" type="number" min={1} className="input" value={form.maxRepeats ?? ''} onChange={(e) => setForm({ ...form, maxRepeats: num(e.target.value) })} />
+              </Field>
+            </div>
+          </>
         ) : (
-          <div className="form-row form-row--3">
-            <Field id="targetValue" label="Целевое значение T" required error={errors.targetValue}>
-              <input id="targetValue" type="number" step="any" className="input" value={form.targetValue ?? ''} onChange={(e) => setForm({ ...form, targetValue: num(e.target.value) })} />
+          <>
+            <div className="form-row form-row--3">
+              <Field id="targetValue" label="Целевое значение T" required error={errors.targetValue}>
+                <input id="targetValue" type="number" step="any" className="input" value={form.targetValue ?? ''} onChange={(e) => setForm({ ...form, targetValue: num(e.target.value) })} />
+              </Field>
+              <Field id="direction" label="Сравнение">
+                <select id="direction" className="select" value={form.direction ?? 'AT_LEAST'} onChange={(e) => setForm({ ...form, direction: e.target.value as TargetDirection })}>
+                  <option value="AT_LEAST">Не менее</option>
+                  <option value="AT_MOST">Не более</option>
+                </select>
+              </Field>
+              <label className="check">
+                <input type="checkbox" checked={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.checked })} />
+                Процент: числитель / знаменатель
+              </label>
+            </div>
+            <Field id="methodology" label="Методика" hint="Что в числителе и знаменателе, шкала, источник данных">
+              <textarea id="methodology" className="textarea" rows={2} value={form.methodology ?? ''} onChange={(e) => setForm({ ...form, methodology: e.target.value || null })} />
             </Field>
-            <Field id="direction" label="Сравнение">
-              <select id="direction" className="select" value={form.direction ?? 'AT_LEAST'} onChange={(e) => setForm({ ...form, direction: e.target.value as 'AT_LEAST' | 'AT_MOST' })}>
-                <option value="AT_LEAST">Не менее</option>
-                <option value="AT_MOST">Не более</option>
-              </select>
-            </Field>
-            <label className="check">
-              <input type="checkbox" checked={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.checked })} />
-              Процент: числитель / знаменатель
-            </label>
-          </div>
+          </>
         )}
-        <div className="form-row form-row--3">
-          <Field id="unit" label="Единица измерения">
-            <input id="unit" className="input" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
-          </Field>
-          <Field id="coefficient" label="Коэффициент c" error={errors.coefficient} hint="По умолчанию 1 (ТЗ 6.2)">
-            <input id="coefficient" type="number" step="any" className="input" value={form.coefficient} onChange={(e) => setForm({ ...form, coefficient: Number(e.target.value) })} />
-          </Field>
-          <Field id="maxRepeats" label="Допустимое число повторений" hint="Пусто — без ограничения">
-            <input id="maxRepeats" type="number" min={1} className="input" value={form.maxRepeats ?? ''} onChange={(e) => setForm({ ...form, maxRepeats: num(e.target.value) })} />
-          </Field>
-        </div>
         <Field id="evidence" label="Подтверждающие документы">
           <textarea id="evidence" className="textarea" rows={2} value={form.evidence} onChange={(e) => setForm({ ...form, evidence: e.target.value })} />
         </Field>
-        <label className="check">
-          <input type="checkbox" checked={form.requiresProgram} onChange={(e) => setForm({ ...form, requiresProgram: e.target.checked })} />
-          Учитываются только дисциплины учебного плана ОП топ-ИТ
-        </label>
+        <div className="check-group">
+          <label className="check">
+            <input type="checkbox" checked={form.requiresProgram} onChange={(e) => setForm({ ...form, requiresProgram: e.target.checked })} />
+            Только дисциплины учебного плана ОП топ-ИТ
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={form.evidenceRequired} onChange={(e) => setForm({ ...form, evidenceRequired: e.target.checked })} />
+            Без документа не отправить на проверку
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={form.required} onChange={(e) => setForm({ ...form, required: e.target.checked })} />
+            Обязательный показатель
+          </label>
+        </div>
+        {initial && (
+          <Field id="validFrom" label="Новая редакция действует с" hint="Пусто — с сегодняшнего дня">
+            <input id="validFrom" type="date" className="input" value={form.validFrom ?? ''} onChange={(e) => setForm({ ...form, validFrom: e.target.value || null })} />
+          </Field>
+        )}
         {Object.keys(errors).length > 0 && <Alert kind="error" title="Проверьте поля формы" />}
         <div className="form-actions">
           <button type="submit" className="btn btn--primary">
@@ -232,6 +276,47 @@ function IndicatorForm({ initial }: { initial: IndicatorDto | null }) {
           </Link>
         </div>
       </form>
+      {initial && <Versions id={initial.id} />}
     </>
+  )
+}
+
+/** История редакций (ТЗ 3.2): утверждённые результаты считаются по своей редакции */
+function Versions({ id }: { id: number }) {
+  const { data } = useLoad(() => indicatorVersions(id), `versions-${id}`)
+  if (!data) return null
+  return (
+    <section className="section">
+      <h2>Редакции</h2>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th scope="col" className="num">
+                Ред.
+              </th>
+              <th scope="col">Действует</th>
+              <th scope="col" className="num">
+                B или T
+              </th>
+              <th scope="col">Наименование</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((v) => (
+              <tr key={v.version}>
+                <td className="num">{v.version}</td>
+                <td className="nowrap">
+                  с {fmtDate(v.validFrom)}
+                  {v.validTo ? ` по ${fmtDate(v.validTo)}` : ''}
+                </td>
+                <td className="num">{fmt(v.basePoints ?? v.targetValue)}</td>
+                <td>{v.name}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }

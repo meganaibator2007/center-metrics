@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
-import { createUser, getUser, listDepartments, listPrograms, listUsers, setUserActive, updateUser } from '../../api/org'
-import type { Category, Role, UserDto, UserRequest } from '../../api/types'
+import { createUser, getUser, listDepartments, listPrograms, listUsers, resetPassword, setUserActive, updateUser } from '../../api/org'
+import type { Category, Permission, Role, UserDto, UserRequest } from '../../api/types'
 import { PageHead } from '../../components/PageHead'
-import { Alert, Badge, Breadcrumbs, EmptyRow, ErrorAlert, Field, Loading } from '../../components/ui'
+import { Alert, Badge, Breadcrumbs, EmptyRow, ErrorAlert, Field, Loading, Req } from '../../components/ui'
 import { fieldErrors } from '../../lib/errors'
-import { CATEGORY_LABEL, ROLE_LABEL } from '../../lib/labels'
+import { CATEGORY_LABEL, PERMISSION_LABEL, ROLE_LABEL } from '../../lib/labels'
 import { useLoad } from '../../lib/useLoad'
 
 const ROLES = Object.keys(ROLE_LABEL) as Role[]
 const CATEGORIES = Object.keys(CATEGORY_LABEL) as Category[]
+const PERMISSIONS = Object.keys(PERMISSION_LABEL) as Permission[]
 
 /** Сотрудники и учётные записи (ФР-01): роли, категории оценки, подразделение, программы */
 export function UsersPage() {
@@ -29,7 +30,7 @@ export function UsersPage() {
     const next = new URLSearchParams(params)
     if (value) next.set(name, value)
     else next.delete(name)
-    next.delete('page')
+    if (name !== 'page') next.delete('page')
     setParams(next, { replace: true })
   }
 
@@ -143,9 +144,26 @@ export function UsersPage() {
               </tbody>
             </table>
           </div>
-          <p className="table-footer">
-            Всего: {data.page.totalElements}. Страница {data.page.number + 1} из {data.page.totalPages}.
-          </p>
+          <div className="table-footer">
+            <span>
+              Всего: {data.page.totalElements}. Страница {data.page.number + 1} из {data.page.totalPages}.
+            </span>
+            {data.page.totalPages > 1 && (
+              <span className="form-actions">
+                <button type="button" className="btn btn--small btn--outline" disabled={filter.page === 0} onClick={() => set('page', String(filter.page - 1))}>
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--small btn--outline"
+                  disabled={filter.page + 1 >= data.page.totalPages}
+                  onClick={() => set('page', String(filter.page + 1))}
+                >
+                  Дальше
+                </button>
+              </span>
+            )}
+          </div>
         </>
       )}
     </>
@@ -194,6 +212,10 @@ function UserForm({
     departmentId: initial?.departmentId ?? null,
     position: initial?.position ?? '',
     programIds: initial?.programIds ?? [],
+    reviewProgramIds: initial?.reviewProgramIds ?? [],
+    permissions: initial?.permissions ?? [],
+    managerId: initial?.managerId ?? null,
+    externalId: initial?.externalId ?? null,
     password: null,
   })
   const [error, setError] = useState<unknown>(null)
@@ -282,8 +304,7 @@ function UserForm({
           </Field>
         </div>
         <fieldset className="fieldset">
-          <legend>Образовательные программы</legend>
-          <p className="field__hint">Для РОП — программы, результаты которых он проверяет.</p>
+          <legend>Образовательные программы сотрудника</legend>
           {errors.programIds && <p className="field__error">{errors.programIds}</p>}
           <div className="check-group">
             {programs.map((p) => (
@@ -294,6 +315,41 @@ function UserForm({
             ))}
           </div>
         </fieldset>
+        {form.roles.includes('REVIEWER') && (
+          <fieldset className="fieldset">
+            <legend>
+              Область проверки РОП <Req />
+            </legend>
+            <p className="field__hint">Программы, результаты которых РОП проверяет и по которым вносит целевые показатели.</p>
+            {errors.reviewProgramIds && <p className="field__error">{errors.reviewProgramIds}</p>}
+            <div className="check-group">
+              {programs.map((p) => (
+                <label key={p.id} className="check">
+                  <input
+                    type="checkbox"
+                    checked={form.reviewProgramIds.includes(p.id)}
+                    onChange={() => setForm({ ...form, reviewProgramIds: toggle(form.reviewProgramIds, p.id) })}
+                  />
+                  {p.code} {p.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        <fieldset className="fieldset">
+          <legend>Полномочия</legend>
+          <div className="check-group">
+            {PERMISSIONS.map((perm) => (
+              <label key={perm} className="check">
+                <input type="checkbox" checked={form.permissions.includes(perm)} onChange={() => setForm({ ...form, permissions: toggle(form.permissions, perm) })} />
+                {PERMISSION_LABEL[perm]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <Field id="externalId" label="Внешний идентификатор" hint="Табельный номер или ID из кадровой системы: ключ при импорте">
+          <input id="externalId" className="input" value={form.externalId ?? ''} onChange={(e) => setForm({ ...form, externalId: e.target.value || null })} />
+        </Field>
         {Object.keys(errors).length > 0 && <Alert kind="error" title="Проверьте поля формы" />}
         <div className="form-actions">
           <button type="submit" className="btn btn--primary">
@@ -304,6 +360,44 @@ function UserForm({
           </Link>
         </div>
       </form>
+      {initial && <ResetPassword user={initial} />}
     </>
+  )
+}
+
+/** Выдача временного пароля: после входа сотрудник обязан его сменить */
+function ResetPassword({ user }: { user: UserDto }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<unknown>(null)
+  const [done, setDone] = useState(false)
+  const errors = fieldErrors(error)
+
+  async function reset(event: FormEvent) {
+    event.preventDefault()
+    setError(null)
+    setDone(false)
+    try {
+      await resetPassword(user.id, password)
+      setPassword('')
+      setDone(true)
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  return (
+    <form className="card form section" onSubmit={reset} noValidate>
+      <p className="card__title">Временный пароль</p>
+      {user.mustChangePassword && <p className="muted">Сотрудник ещё не сменил выданный пароль.</p>}
+      {done && <Alert kind="success" title="Пароль выдан. При следующем входе сотрудник задаст свой." />}
+      <Field id="tmp-password" label="Новый временный пароль" required error={errors.password} hint="Не короче 8 символов; передайте сотруднику лично">
+        <input id="tmp-password" type="password" className="input" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </Field>
+      <div className="form-actions">
+        <button type="submit" className="btn btn--outline" disabled={password.length < 8}>
+          Выдать временный пароль
+        </button>
+      </div>
+    </form>
   )
 }

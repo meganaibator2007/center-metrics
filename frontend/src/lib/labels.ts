@@ -2,10 +2,12 @@
 
 import type {
   AccrualMethod,
+  AchievementType,
   Category,
   DecisionAction,
   IdentifierType,
   PeriodType,
+  Permission,
   ResultStatus,
   Role,
 } from '../api/types'
@@ -56,6 +58,21 @@ export const ACTION_LABEL: Record<DecisionAction, string> = {
   REVISION: 'Отправлено на пересмотр',
 }
 
+export const ACHIEVEMENT_TYPE_LABEL: Record<AchievementType, string> = {
+  PUBLICATION: 'Публикация',
+  UMK_DOCUMENT: 'Документ УМК (УМК, ФОС, РПД)',
+  EVENT: 'Мероприятие',
+  CONTRACT: 'Договор, соглашение',
+  CONFERENCE: 'Конференция',
+  OTHER: 'Другое',
+}
+
+export const PERMISSION_LABEL: Record<Permission, string> = {
+  ENTER_FOR_OTHERS: 'Ввод результатов за других сотрудников',
+  IMPORT: 'Импорт XLSX в своей области',
+  AUP_SELF_ENTRY: 'Самостоятельный ввод результатов АУП',
+}
+
 export const IDENTIFIER_LABEL: Record<IdentifierType, string> = {
   DOI: 'DOI',
   URL: 'Ссылка',
@@ -65,7 +82,9 @@ export const IDENTIFIER_LABEL: Record<IdentifierType, string> = {
 export const PERIOD_TYPE_LABEL: Record<PeriodType, string> = {
   MONTH: 'Месяц',
   QUARTER: 'Квартал',
+  SEMESTER: 'Семестр',
   HALF_YEAR: 'Полугодие',
-  YEAR: 'Год',
+  YEAR: 'Календарный год',
+  ACADEMIC_YEAR: 'Учебный год',
   CUSTOM: 'Произвольный',
 }

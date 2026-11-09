@@ -21,10 +21,13 @@ export function PeriodFilter({ current, filter }: { current?: PeriodDto; filter?
         value={value}
         onChange={(e) => {
           const next = new URLSearchParams(params)
-          next.set('periodId', e.target.value)
+          if (e.target.value) next.set('periodId', e.target.value)
+          else next.delete('periodId')
           setParams(next, { replace: true })
         }}
       >
+        {/* Без текущего периода фильтр не применён: честно показываем «Все периоды» */}
+        {!current && <option value="">Все периоды</option>}
         {current && !periods.some((p) => p.id === current.id) && <option value={current.id}>{current.name}</option>}
         {periods.map((p) => (
           <option key={p.id} value={p.id}>

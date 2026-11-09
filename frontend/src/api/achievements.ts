@@ -1,6 +1,7 @@
 import { request } from './client'
 import { query } from './org'
-import type { AchievementDto, AchievementRequest, Category, DuplicateDto, EvidenceDto, ResultStatus } from './types'
+import { fileUrl } from './client'
+import type { AchievementDto, AchievementRequest, Category, DuplicateDto, EvidenceDto, IdentifierType, ResultStatus } from './types'
 
 /** my — свои и где соавтор; review — очередь РОП; approval — очередь директора; registry — всё доступное */
 export type AchievementScope = 'my' | 'review' | 'approval' | 'registry'
@@ -23,6 +24,8 @@ export const deleteAchievement = (id: number) => request<void>('DELETE', `/achie
 
 export interface DuplicateQuery {
   indicatorId: number
+  /** URL строгим ключом не считается (ТЗ 5.2): по нему только «похожие» */
+  identifierType: IdentifierType | null
   identifier: string | null
   title: string
   eventDate: string
@@ -34,14 +37,17 @@ export const checkDuplicates = (data: DuplicateQuery) => request<DuplicateDto[]>
 /** Присоединиться к уже зарегистрированному достижению как соавтор (ТЗ 5.4) */
 export const joinAchievement = (id: number) => request<AchievementDto>('POST', `/achievements/${id}/join`)
 
-export function uploadEvidence(id: number, file: File, docType: string): Promise<EvidenceDto> {
+export function uploadEvidence(id: number, file: File, docType: string, requisites: string | null): Promise<EvidenceDto> {
   const form = new FormData()
   form.set('file', file)
   form.set('docType', docType)
+  if (requisites) form.set('requisites', requisites)
   return request<EvidenceDto>('POST', `/achievements/${id}/evidence`, form)
 }
-export const addEvidenceLink = (id: number, docType: string, url: string) =>
-  request<EvidenceDto>('POST', `/achievements/${id}/evidence`, { docType, url })
+export const addEvidenceLink = (id: number, docType: string, url: string, requisites: string | null) =>
+  request<EvidenceDto>('POST', `/achievements/${id}/evidence`, { docType, url, requisites })
+/** Адрес для скачивания файла: браузер сам пошлёт cookie сессии */
+export const evidenceFileUrl = (id: number, evidenceId: number) => fileUrl(`/achievements/${id}/evidence/${evidenceId}/file`)
 export const removeEvidence = (id: number, evidenceId: number) => request<void>('DELETE', `/achievements/${id}/evidence/${evidenceId}`)
 
 // Маршрут согласования (ТЗ 4.1)
