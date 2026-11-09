@@ -1,0 +1,29 @@
+feature/T-05-T-08-docker-v2
+# Игнорируем файл с локальными паролями
+.env
+
+# Временные папки сборщика Java (Maven / Gradle)
+target/
+build/
+.gradle/
+*.jar
+*.war
+
+# Настройки VS Code
+.vscode/
+.DS_Store
+
+# Сборка Maven
+target/
+
+# Настройки IDE
+.idea/
+*.iml
+.vscode/
+
+# Секреты: в репозитории только .env.example
+.env
+
+# Загруженные файлы при локальном запуске
+uploads/
+backend-first-stage
