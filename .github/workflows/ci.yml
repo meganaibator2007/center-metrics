@@ -1,0 +1,45 @@
+name: Center Metrics CI/CD
+
+on:
+  push:
+    branches: [ "dev", "backend-first-stage" ]
+  pull_request:
+    branches: [ "dev", "backend-first-stage" ]
+
+jobs:
+  # Сборка и тесты фронтенда
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies & Build React
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+  # Сборка и тесты Java бэкенда (Maven)
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven & Run Tests
+        run: ./mvnw clean package
