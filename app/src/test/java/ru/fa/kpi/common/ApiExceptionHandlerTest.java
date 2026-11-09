@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Формат ошибок, который ждёт клиент: ProblemDetail, ошибки полей в errors. */
 @WebMvcTest(ApiExceptionHandlerTest.TestController.class)
 @Import({SecurityConfig.class, ApiExceptionHandlerTest.TestController.class})
-@WithMockUser(roles = "TEACHER")
+@WithMockUser(roles = "EMPLOYEE")
 class ApiExceptionHandlerTest {
 
     @Autowired

@@ -1,14 +1,15 @@
 # center-metrics
-Веб-система учёта показателей деятельности центра
+Система учёта показателей эффективности сотрудников: достижения, баллы, цели РОП, согласование и отчётность
 
 ## Документы
 
 - [Архитектура](docs/ARCHITECTURE.md): три контейнера, пакеты, кто от кого зависит, миграции, мапперы
 - [Контракт API](docs/api.md): список адресов. Поля запросов и ответов — в [openapi.yaml](app/src/main/resources/static/openapi.yaml)
+- [База данных](docs/DATABASE.md): таблицы, ограничения, индексы
 
 ## Как устроено
 
-Три контейнера: `frontend` (nginx раздаёт React и пересылает `/api`) → `backend` (Spring Boot) → `db` (PostgreSQL 16). Подробнее — в [архитектуре](docs/ARCHITECTURE.md#docker). Файлы Docker появятся с задачей T-05.
+Три контейнера: `frontend` (nginx раздаёт React и пересылает `/api`) → `backend` (Spring Boot) → `db` (PostgreSQL 16). Подробнее — в [архитектуре](docs/ARCHITECTURE.md#docker).
 
 ## Что нужно для бэкенда
 

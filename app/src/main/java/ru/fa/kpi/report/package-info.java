@@ -1,9 +1,8 @@
 /**
- * Итоги: кабинет преподавателя, статус и отправка отчёта, отчёт преподавателя,
- * сводный отчёт с рейтингом, контроль сдачи. Публикует ReportSubmitted и ReportReturned.
- * Таблицы с префиксом rep_, миграции V600–V699.
+ * Чтение итогов: личные показатели, дашборд директора и выгрузки XLSX.
+ * Своих таблиц нет, диапазон миграций V600–V699 оставлен для шаблонов отчётов второго этапа.
  */
-@ApplicationModule(allowedDependencies = {"common", "user", "indicator", "period", "entry", "scoring"})
+@ApplicationModule(allowedDependencies = {"common", "user", "indicator", "period", "achievement", "measurement", "scoring"})
 package ru.fa.kpi.report;
 
 import org.springframework.modulith.ApplicationModule;
