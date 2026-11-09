@@ -1,13 +1,12 @@
-version: '3.8'
-
 services:
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: center_metrics_frontend
+    # Наружу открыт только фронт: браузер ходит на nginx, он пересылает /api на бэкенд
     ports:
-      - "80:80"
+      - "${WEB_PORT:-80}:80"
     restart: unless-stopped
     depends_on:
       backend:
@@ -18,8 +17,7 @@ services:
       context: .
       dockerfile: app/Dockerfile
     container_name: center_metrics_backend
-    ports:
-      - "${APP_PORT}:8080"
+    # Порт бэкенда наружу не открываем; для разработки он есть в docker-compose.override.yml
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -33,11 +31,13 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    # В eclipse-temurin:25-jre нет wget и curl, поэтому запрос к /api/health идёт средствами bash
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /api/health HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   db:
     image: postgres:16-alpine
