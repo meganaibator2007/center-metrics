@@ -1,0 +1,11 @@
+# Для сборки клиента Docker получает только эти файлы. Контекст — корень репозитория,
+# поэтому без этого списка он отправлял бы в Docker и frontend/node_modules с бинарниками macOS.
+*
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.ts
+!frontend/tsconfig*.json
+!frontend/public
+!frontend/src
+!frontend/nginx.conf
