@@ -120,7 +120,7 @@ frontend/
 
 - Клиент и сервер собираются отдельно: сервер – `./mvnw package` (jar без клиента), клиент – `npm run build` в папке `frontend` (результат в `dist`). Сборке сервера не нужен Node.js, сборке клиента не нужен Maven.
 - Docker Compose поднимает три контейнера: `frontend` (nginx), `backend` (Spring Boot) и `db` (PostgreSQL 16). Каждый образ собирается внутри Docker в два этапа, поэтому на чистом компьютере хватает `docker compose up --build` (NFR-15).
-- Браузер ходит только на `frontend`. nginx отдаёт файлы клиента, для маршрутов клиента (`/cabinet`, `/admin/users`) отдаёт `index.html`, а запросы `/api/` пересылает на `backend:8080`. Адрес у браузера один, поэтому CORS не нужен, cookie сессии и CSRF работают без дополнительной настройки. Наружу открыт только порт `frontend`. Конфигурация nginx – `frontend/nginx/default.conf.template`, адрес сервера задаёт переменная `BACKEND_URL`.
+- Браузер ходит только на `frontend`. nginx отдаёт файлы клиента, для маршрутов клиента (`/cabinet`, `/admin/users`) отдаёт `index.html`, а запросы `/api/` пересылает на `backend:8080`. Адрес у браузера один, поэтому CORS не нужен, cookie сессии и CSRF работают без дополнительной настройки. Наружу открыт только порт `frontend`. Конфигурация nginx – `frontend/nginx.conf`.
 - При разработке клиента: `npm run dev`. Vite перенаправляет `/api` на `localhost:8080`.
 - Пока метода API нет, клиент работает на заглушках в `src/api`. Формат заглушки совпадает с `docs/api.md`.
 
