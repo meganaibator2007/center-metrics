@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: center-metrics
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Схему меняют только миграции Flyway
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+    # У каждого пакета свой диапазон номеров, поэтому V101 может появиться после V600
+    out-of-order: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  data:
+    web:
+      pageable:
+        serialization-mode: via-dto
+
+server:
+  # Бэкенд работает за nginx: адрес и схему запроса берём из заголовков X-Forwarded-*
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+
+app:
+  storage:
+    # Папка для прикреплённых файлов, вне static/. В Docker — том uploads
+    dir: ${APP_STORAGE_DIR:./uploads}
+
+# Проверка сервера: GET /api/health
+management:
+  endpoints:
+    web:
+      base-path: /api
+      exposure:
+        include: health
+      discovery:
+        enabled: false
+  endpoint:
+    health:
+      show-details: never
+
+# Swagger UI: /swagger-ui.html
+springdoc:
+  swagger-ui:
+    urls:
+      - name: Контракт API
+        url: /openapi.yaml
+      - name: Реализовано в коде
+        url: /v3/api-docs
+    urls-primary-name: Контракт API
