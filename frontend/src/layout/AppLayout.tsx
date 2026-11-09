@@ -39,7 +39,9 @@ export function AppLayout() {
                   {ROLE_LABEL[role]}
                 </span>
               ))}
-              <span>{user.fullName}</span>
+              <Link to="/password" className="topbar__logout">
+                {user.fullName}
+              </Link>
               <button type="button" className="topbar__logout" onClick={handleLogout}>
                 Выйти
               </button>

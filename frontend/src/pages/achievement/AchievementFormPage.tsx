@@ -70,7 +70,8 @@ let rowKey = 1
 
 function fromDto(a: AchievementDto): FormState {
   return {
-    ownerId: a.owner.id,
+    // ownerId заполняется только при вводе за другого, иначе сервер потребует основание
+    ownerId: a.enteredBy ? a.owner.id : null,
     basis: a.basis ?? '',
     indicatorId: String(a.indicatorId),
     periodId: String(a.periodId),
@@ -141,7 +142,8 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
   const [saving, setSaving] = useState(false)
   const [duplicates, setDuplicates] = useState<DuplicateDto[]>([])
 
-  const canEnterForOthers = hasRole(user, 'ADMIN', 'REVIEWER')
+  // Ввод за другого: админ или полномочие ENTER_FOR_OTHERS (ТЗ 2.2)
+  const canEnterForOthers = hasRole(user, 'ADMIN') || !!user?.permissions.includes('ENTER_FOR_OTHERS')
   const selfEmployee = hasRole(user, 'EMPLOYEE')
 
   const indicator = indicators.find((i) => String(i.id) === form.indicatorId)
@@ -154,7 +156,11 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
   // Индикаторы по категориям сотрудника; при вводе за другого — все балльные
   const available = useMemo(() => {
     const all = (indicators).filter((i) => i.evaluationType === 'POINTS')
-    return form.ownerId === null && user ? all.filter((i) => user.categories.includes(i.category)) : all
+    if (form.ownerId !== null || !user) return all
+    // Свои результаты — только по своим категориям; АУП вносит уполномоченный, если нет права самостоятельного ввода (ТЗ 4.2)
+    return all.filter(
+      (i) => user.categories.includes(i.category) && (i.category !== 'AUP' || user.permissions.includes('AUP_SELF_ENTRY')),
+    )
   }, [indicators, form.ownerId, user])
 
   // Предварительный расчёт долей: окончательный делает сервер при утверждении
@@ -176,6 +182,8 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+    // Реквизиты поменялись — прежний результат проверки дублей больше не верен
+    if (['indicatorId', 'title', 'eventDate', 'identifierType', 'identifier'].includes(key)) setDuplicates([])
   }
 
   function setCoauthor(key: number, patch: Partial<Coauthor>) {
@@ -183,11 +191,13 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
   }
 
   async function findDuplicates() {
-    if (!form.indicatorId || (!form.identifier.trim() && !form.title.trim())) return
+    const identifier = form.identifierType ? form.identifier.trim() || null : null
+    if (!form.indicatorId || (!identifier && !form.title.trim())) return
     try {
       const found = await checkDuplicates({
         indicatorId: Number(form.indicatorId),
-        identifier: form.identifier.trim() || null,
+        identifierType: identifier ? form.identifierType || null : null,
+        identifier,
         title: form.title,
         eventDate: form.eventDate,
         excludeId: editId,
@@ -239,7 +249,8 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
 
   const strict = duplicates.filter((d) => d.match === 'STRICT')
   const similar = duplicates.filter((d) => d.match === 'SIMILAR')
-  const openPeriods = periods.filter((p) => !p.closed)
+  // При пересмотре достижение может быть в закрытом периоде: показываем его, чтобы не подменить молча
+  const openPeriods = periods.filter((p) => !p.closed || String(p.id) === form.periodId)
 
   return (
     <>
@@ -265,7 +276,7 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
 
       <div className="grid grid--sidebar">
         <form className="form" onSubmit={handleSubmit} noValidate>
-          {canEnterForOthers && !editId && (
+          {((canEnterForOthers && !editId) || form.ownerId !== null) && (
             <fieldset className="fieldset">
               <legend>Административный ввод</legend>
               <Field id="ownerId" label="Чей результат" hint="ТЗ 2.2: ввод за сотрудника фиксирует инициатора и основание">
@@ -273,6 +284,7 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
                   id="ownerId"
                   className="select"
                   value={form.ownerId ?? ''}
+                  disabled={!!editId}
                   onChange={(e) => set('ownerId', e.target.value ? Number(e.target.value) : null)}
                 >
                   {selfEmployee && <option value="">Мой собственный</option>}
@@ -317,6 +329,12 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
               })}
             </select>
           </Field>
+          {available.length === 0 && (
+            <p className="field__hint">
+              Для ваших категорий нет показателей, которые вы вносите сами. Результаты АУП вносит уполномоченный пользователь по данным
+              РОП.
+            </p>
+          )}
           {indicator && (
             <p className="field__hint">
               Начисление: <strong>{ACCRUAL_LABEL[indicator.accrualMethod ?? 'INDIVIDUAL']}</strong>. Подтверждение: {indicator.evidence}
@@ -326,9 +344,11 @@ function AchievementForm({ editId, existing, initial, indicators, periods, progr
           <div className="form-row">
             <Field id="periodId" label="Отчётный период" required error={errors.periodId}>
               <select id="periodId" className="select" value={form.periodId} onChange={(e) => set('periodId', e.target.value)}>
+                {!form.periodId && <option value="">Выберите период</option>}
                 {openPeriods.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                    {p.closed ? ' (закрыт)' : ''}
                   </option>
                 ))}
               </select>

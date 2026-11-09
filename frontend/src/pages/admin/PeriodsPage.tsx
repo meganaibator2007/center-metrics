@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { closePeriod, createPeriod, listPeriods, reopenPeriod } from '../../api/periods'
+import { hasRole } from '../../auth/context'
+import { useAuth } from '../../auth/useAuth'
 import type { PeriodRequest, PeriodType } from '../../api/types'
 import { PageHead } from '../../components/PageHead'
 import { Alert, Badge, ErrorAlert, Field, Loading } from '../../components/ui'
@@ -10,6 +12,10 @@ import { useLoad } from '../../lib/useLoad'
 
 /** Отчётные периоды (ФР-09): календарные и произвольные, закрытие и санкционированное переоткрытие */
 export function PeriodsPage() {
+  const { user } = useAuth()
+  // Создаёт и закрывает периоды админ; переоткрывает закрытый — директор (ТЗ 4.3)
+  const admin = hasRole(user, 'ADMIN')
+  const director = hasRole(user, 'DIRECTOR')
   const { data, error, loading, reload } = useLoad(listPeriods, 'periods-admin')
   const [form, setForm] = useState<PeriodRequest>({ name: '', type: 'QUARTER', startDate: '', endDate: '' })
   const [formError, setFormError] = useState<unknown>(null)
@@ -75,6 +81,7 @@ export function PeriodsPage() {
                   </td>
                   <td>
                     {p.closed ? (
+                      director && (
                       <button
                         type="button"
                         className="btn btn--small btn--outline"
@@ -85,7 +92,9 @@ export function PeriodsPage() {
                       >
                         Переоткрыть
                       </button>
+                      )
                     ) : (
+                      admin && (
                       <button
                         type="button"
                         className="btn btn--small btn--outline"
@@ -93,6 +102,7 @@ export function PeriodsPage() {
                       >
                         Закрыть
                       </button>
+                      )
                     )}
                   </td>
                 </tr>
@@ -102,6 +112,7 @@ export function PeriodsPage() {
         </div>
       )}
 
+      {admin && (
       <form className="card form section" onSubmit={create} noValidate>
         <p className="card__title">Новый период</p>
         {formError && !Object.keys(errors).length ? <Alert kind="error" title={String((formError as Error).message)} /> : null}
@@ -133,6 +144,7 @@ export function PeriodsPage() {
           </button>
         </div>
       </form>
+      )}
     </>
   )
 }

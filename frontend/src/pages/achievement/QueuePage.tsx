@@ -24,7 +24,21 @@ export function QueuePage({ mode }: { mode: 'review' | 'approval' }) {
       />
       {loading && !data && <Loading />}
       {error ? <ErrorAlert error={error} onRetry={reload} /> : null}
-      {data && <AchievementTable items={data} empty={review ? 'Очередь проверки пуста' : 'Нет результатов, ожидающих решения'} />}
+      {data && review && <AchievementTable items={data} empty="Очередь проверки пуста" />}
+      {data && !review && (
+        <>
+          <section className="section">
+            <h2>Утвердить</h2>
+            <p className="muted">Проверка пройдена — нужно итоговое решение.</p>
+            <AchievementTable items={data.filter((a) => a.status === 'REVIEWED')} empty="Нет проверенных результатов" />
+          </section>
+          <section className="section">
+            <h2>Проверить результаты РОП</h2>
+            <p className="muted">Заявитель сам РОП, поэтому данные проверяет директор. Утверждение — следующим отдельным решением.</p>
+            <AchievementTable items={data.filter((a) => a.status === 'ON_REVIEW')} empty="Нет результатов РОП на проверке" />
+          </section>
+        </>
+      )}
     </>
   )
 }

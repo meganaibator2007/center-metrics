@@ -7,7 +7,10 @@ import {
   approveMeasurement,
   createMeasurement,
   listMeasurements,
+  rejectMeasurement,
   returnMeasurement,
+  reviewMeasurement,
+  revisionMeasurement,
   submitMeasurement,
   updateMeasurement,
 } from '../../api/scores'
@@ -22,7 +25,7 @@ import { fmt } from '../../lib/format'
 import { useLoad } from '../../lib/useLoad'
 import { TargetsTable } from '../home/DirectorDashboard'
 
-const EDITABLE = ['DRAFT', 'RETURNED']
+const EDITABLE = ['DRAFT', 'RETURNED', 'REVISION']
 
 /**
  * Целевые показатели РОП (ТЗ 6.3): план T, факт F (для процентов — числитель и знаменатель),
@@ -33,7 +36,7 @@ export function TargetsPage() {
   const [params] = useSearchParams()
   // Цели РОП годовые: по умолчанию открытый год
   const periods = useLoad(listPeriods, 'periods')
-  const years = (periods.data ?? []).filter((p) => p.type === 'YEAR')
+  const years = (periods.data ?? []).filter((p) => p.type === 'YEAR' || p.type === 'ACADEMIC_YEAR')
   const year = years.find((p) => !p.closed) ?? years[0]
   const periodId = params.get('periodId') ? Number(params.get('periodId')) : year?.id
   const programId = params.get('programId') ? Number(params.get('programId')) : undefined
@@ -58,8 +61,14 @@ export function TargetsPage() {
     }
   }
 
+  function ask(label: string, action: (comment: string) => Promise<unknown>, done: string) {
+    const comment = window.prompt(label)
+    if (comment?.trim()) void act(() => action(comment.trim()), done)
+  }
+
+  // Маршрут значения РОП (ТЗ 4.2): РОП отправляет → директор проверяет данные → директор утверждает
   function actions(m: MeasurementDto) {
-    const mineProgram = hasRole(user, 'ADMIN') || (user?.programIds.includes(m.programId) ?? false)
+    const mineProgram = hasRole(user, 'ADMIN') || (user?.reviewProgramIds.includes(m.programId) ?? false)
     return (
       <div className="cell-actions">
         {canEnter && mineProgram && EDITABLE.includes(m.status) && (
@@ -67,27 +76,39 @@ export function TargetsPage() {
             <button type="button" className="btn btn--small btn--outline" onClick={() => setEditing(m)}>
               Изменить
             </button>
-            <button type="button" className="btn btn--small btn--primary" onClick={() => act(() => submitMeasurement(m.id), 'Отправлено директору на утверждение.')}>
-              На утверждение
+            <button type="button" className="btn btn--small btn--primary" onClick={() => act(() => submitMeasurement(m.id), 'Отправлено директору на проверку.')}>
+              Директору
             </button>
           </>
         )}
+        {director && m.status === 'ON_REVIEW' && (
+          <button type="button" className="btn btn--small btn--primary" onClick={() => act(() => reviewMeasurement(m.id), 'Данные проверены, значение ждёт утверждения.')}>
+            Проверено
+          </button>
+        )}
         {director && m.status === 'REVIEWED' && (
+          <button type="button" className="btn btn--small btn--primary" onClick={() => act(() => approveMeasurement(m.id), 'Значение утверждено.')}>
+            Утвердить
+          </button>
+        )}
+        {director && (m.status === 'ON_REVIEW' || m.status === 'REVIEWED') && (
           <>
-            <button type="button" className="btn btn--small btn--primary" onClick={() => act(() => approveMeasurement(m.id), 'Значение утверждено.')}>
-              Утвердить
-            </button>
-            <button
-              type="button"
-              className="btn btn--small btn--outline"
-              onClick={() => {
-                const comment = window.prompt('Причина возврата')
-                if (comment?.trim()) void act(() => returnMeasurement(m.id, comment.trim()), 'Возвращено на доработку.')
-              }}
-            >
+            <button type="button" className="btn btn--small btn--outline" onClick={() => ask('Причина возврата', (c) => returnMeasurement(m.id, c), 'Возвращено на доработку.')}>
               Вернуть
             </button>
+            <button type="button" className="btn btn--small btn--danger" onClick={() => ask('Причина отклонения', (c) => rejectMeasurement(m.id, c), 'Отклонено.')}>
+              Отклонить
+            </button>
           </>
+        )}
+        {director && m.status === 'APPROVED' && (
+          <button
+            type="button"
+            className="btn btn--small btn--outline"
+            onClick={() => ask('Что исправить (новая версия значения)', (c) => revisionMeasurement(m.id, c), 'Значение открыто для исправления.')}
+          >
+            На исправление
+          </button>
         )}
       </div>
     )
@@ -108,7 +129,7 @@ export function TargetsPage() {
         }
       />
       <div className="filters">
-        <PeriodFilter current={year} filter={(p) => p.type === 'YEAR'} />
+        <PeriodFilter current={year} filter={(p) => p.type === 'YEAR' || p.type === 'ACADEMIC_YEAR'} />
         <ProgramFilter />
       </div>
       {message && <Alert kind="success" title={message} />}
@@ -181,15 +202,17 @@ function MeasurementForm({ initial, periodId, onCancel, onSaved }: FormProps) {
   const indicators = useLoad(() => listIndicators({ evaluationType: 'TARGET', archived: false }), 'targets')
   const programs = useLoad(listPrograms, 'programs')
   const [indicatorId, setIndicatorId] = useState(initial ? String(initial.indicatorId) : '')
-  const [programId, setProgramId] = useState(initial ? String(initial.programId) : String(user?.programIds[0] ?? ''))
+  const [programId, setProgramId] = useState(initial ? String(initial.programId) : user?.reviewProgramIds.length === 1 ? String(user.reviewProgramIds[0]) : '')
   const [value, setValue] = useState(initial?.value !== null && initial && !initial.percent ? String(initial.value) : '')
   const [numerator, setNumerator] = useState(initial?.numerator !== null && initial ? String(initial.numerator) : '')
   const [denominator, setDenominator] = useState(initial?.denominator !== null && initial ? String(initial.denominator) : '')
   const [source, setSource] = useState(initial?.source ?? '')
+  const [scale, setScale] = useState(initial?.scale ?? '')
+  const [documentBasis, setDocumentBasis] = useState(initial?.documentBasis ?? '')
   const [error, setError] = useState<unknown>(null)
   const errors = fieldErrors(error)
   const indicator = indicators.data?.find((i) => String(i.id) === indicatorId)
-  const myPrograms = (programs.data ?? []).filter((p) => p.topIt && (hasRole(user, 'ADMIN') || user?.programIds.includes(p.id)))
+  const myPrograms = (programs.data ?? []).filter((p) => p.topIt && (hasRole(user, 'ADMIN') || user?.reviewProgramIds.includes(p.id)))
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -197,11 +220,13 @@ function MeasurementForm({ initial, periodId, onCancel, onSaved }: FormProps) {
     const body: MeasurementRequest = {
       indicatorId: Number(indicatorId),
       periodId,
-      programId: Number(programId),
+      programId: programId ? Number(programId) : 0,
       value: value === '' ? null : Number(value.replace(',', '.')),
       numerator: numerator === '' ? null : Number(numerator),
       denominator: denominator === '' ? null : Number(denominator),
       source: source || null,
+      scale: scale || null,
+      documentBasis: documentBasis || null,
     }
     try {
       if (initial) await updateMeasurement(initial.id, body)
@@ -227,8 +252,9 @@ function MeasurementForm({ initial, periodId, onCancel, onSaved }: FormProps) {
             ))}
           </select>
         </Field>
-        <Field id="m-program" label="Образовательная программа" required>
+        <Field id="m-program" label="Образовательная программа" required error={errors.programId}>
           <select id="m-program" className="select" value={programId} disabled={!!initial} onChange={(e) => setProgramId(e.target.value)}>
+            <option value="">Выберите программу</option>
             {myPrograms.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} {p.name}
@@ -251,9 +277,18 @@ function MeasurementForm({ initial, periodId, onCancel, onSaved }: FormProps) {
           <input id="m-value" type="number" min={0} step="any" className="input" value={value} onChange={(e) => setValue(e.target.value)} />
         </Field>
       )}
-      <Field id="m-source" label="Источник данных" hint="Документ-основание: приказ, ведомость, отчёт">
-        <input id="m-source" className="input" value={source} onChange={(e) => setSource(e.target.value)} />
-      </Field>
+      {indicator?.methodology && <p className="field__hint">Методика: {indicator.methodology}</p>}
+      <div className="form-row form-row--3">
+        <Field id="m-source" label="Источник данных" hint="Ведомость, анкетирование, отчёт">
+          <input id="m-source" className="input" value={source} onChange={(e) => setSource(e.target.value)} />
+        </Field>
+        <Field id="m-basis" label="Документ-основание" hint="Номер и дата приказа или протокола">
+          <input id="m-basis" className="input" value={documentBasis} onChange={(e) => setDocumentBasis(e.target.value)} />
+        </Field>
+        <Field id="m-scale" label="Шкала" hint="Для удовлетворённости: например, 1–5">
+          <input id="m-scale" className="input" value={scale} onChange={(e) => setScale(e.target.value)} />
+        </Field>
+      </div>
       <div className="form-actions">
         <button type="submit" className="btn btn--primary">
           Сохранить

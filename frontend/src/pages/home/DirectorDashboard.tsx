@@ -231,7 +231,9 @@ export function TargetsTable({ rows, actions }: { rows: MeasurementDto[]; action
                 )}
               </td>
               <td>
-                <StatusBadge status={m.status} />
+                {/* Значения РОП проверяет директор, а не РОП (ТЗ 4.2) */}
+                <StatusBadge status={m.status} reviewer="DIRECTOR" />
+                {m.lastComment && ['RETURNED', 'REJECTED', 'REVISION'].includes(m.status) && <div className="cell-sub">{m.lastComment}</div>}
               </td>
               {actions && <td>{actions(m)}</td>}
             </tr>

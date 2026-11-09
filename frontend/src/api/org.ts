@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { DepartmentDto, Page, PersonShort, ProgramDto, UserDto, UserRequest } from './types'
+import type { ChangePasswordRequest, DepartmentDto, Page, PersonShort, ProgramDto, UserDto, UserRequest } from './types'
 
 export const listDepartments = () => request<DepartmentDto[]>('GET', '/departments')
 export const listPrograms = () => request<ProgramDto[]>('GET', '/programs')
@@ -22,6 +22,9 @@ export const getUser = (id: number) => request<UserDto>('GET', `/users/${id}`)
 export const createUser = (data: UserRequest) => request<UserDto>('POST', '/users', data)
 export const updateUser = (id: number, data: UserRequest) => request<UserDto>('PUT', `/users/${id}`, data)
 export const setUserActive = (id: number, active: boolean) => request<UserDto>('PATCH', `/users/${id}/active`, { active })
+/** Админ выдаёт временный пароль: после входа сотрудник обязан его сменить */
+export const resetPassword = (id: number, password: string) => request<void>('POST', `/users/${id}/reset-password`, { password })
+export const changePassword = (data: ChangePasswordRequest) => request<void>('POST', '/auth/password', data)
 
 /** Параметры адреса из объекта: пустые значения пропускаются */
 export function query(params: object): string {

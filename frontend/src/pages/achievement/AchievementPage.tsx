@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import {
   addEvidenceLink,
   approveAchievement,
+  evidenceFileUrl,
   checkDuplicates,
   deleteAchievement,
   getAchievement,
@@ -15,6 +16,7 @@ import {
   submitAchievement,
   uploadEvidence,
 } from '../../api/achievements'
+import { useMock } from '../../api/client'
 import type { AchievementDto, DuplicateDto } from '../../api/types'
 import { hasRole } from '../../auth/context'
 import { useAuth } from '../../auth/useAuth'
@@ -45,9 +47,14 @@ export function AchievementPage() {
   const participant = a.participants.some((p) => p.userId === user.id) || a.owner.id === user.id
   const author = a.owner.id === user.id || a.enteredBy === user.fullName
   const editable = author && EDITABLE.includes(a.status)
-  const reviewerTurn = hasRole(user, 'REVIEWER') && !participant && a.status === 'ON_REVIEW' && a.reviewer === 'ROP'
-  const directorTurn =
-    hasRole(user, 'DIRECTOR') && !participant && (a.status === 'REVIEWED' || (a.status === 'ON_REVIEW' && a.reviewer === 'DIRECTOR'))
+  // Проверка и утверждение — разные решения (ТЗ 2.2, 4.2): /review из ON_REVIEW, /approve только из REVIEWED.
+  // Результат самого РОП (reviewer = DIRECTOR) проверяет директор, потом он же утверждает.
+  const reviewTurn =
+    a.status === 'ON_REVIEW' &&
+    !participant &&
+    (a.reviewer === 'ROP' ? hasRole(user, 'REVIEWER') : hasRole(user, 'DIRECTOR'))
+  const approveTurn = a.status === 'REVIEWED' && !participant && hasRole(user, 'DIRECTOR')
+  const revisionTurn = a.status === 'APPROVED' && !participant && hasRole(user, 'DIRECTOR')
   const canJoin =
     hasRole(user, 'EMPLOYEE') && !participant && a.status !== 'REJECTED' && a.participants.length > 0 && a.basePoints > 0
   const mine = a.participants.find((p) => p.userId === user.id)
@@ -222,7 +229,7 @@ export function AchievementPage() {
 
           <Evidence a={a} editable={editable} onChange={reload} />
 
-          {(reviewerTurn || directorTurn) && <DuplicatesCheck a={a} />}
+          {(reviewTurn || approveTurn) && <DuplicatesCheck a={a} />}
         </div>
 
         <aside>
@@ -233,9 +240,9 @@ export function AchievementPage() {
               <p className="stat__note">{STATUS[a.status].label}</p>
             </section>
           )}
-          {(reviewerTurn || directorTurn || (hasRole(user, 'DIRECTOR') && a.status === 'APPROVED' && !participant)) && (
-            <Decision a={a} reviewer={reviewerTurn} busy={busy} run={run} />
-          )}
+          {reviewTurn && <Decision a={a} mode="review" busy={busy} run={run} />}
+          {approveTurn && <Decision a={a} mode="approve" busy={busy} run={run} />}
+          {revisionTurn && <Decision a={a} mode="revision" busy={busy} run={run} />}
           {editable && a.status === 'DRAFT' && (
             <p>
               <button type="button" className="btn btn--danger btn--small" onClick={remove}>
@@ -265,16 +272,19 @@ export function AchievementPage() {
 
 interface DecisionProps {
   a: AchievementDto
-  reviewer: boolean
+  /** review — проверка (РОП или директор для результатов РОП), approve — утверждение, revision — пересмотр */
+  mode: 'review' | 'approve' | 'revision'
   busy: boolean
   run: (action: () => Promise<AchievementDto>, done: string) => Promise<void>
 }
 
 /** Решение РОП или директора; возврат и отклонение — только с комментарием (ТЗ 4.1) */
-function Decision({ a, reviewer, busy, run }: DecisionProps) {
+function Decision({ a, mode, busy, run }: DecisionProps) {
   const [comment, setComment] = useState('')
   const [missing, setMissing] = useState(false)
-  const approved = a.status === 'APPROVED'
+  const approved = mode === 'revision'
+  const reviewer = mode === 'review'
+  const title = approved ? 'Пересмотр' : reviewer ? (a.reviewer === 'DIRECTOR' ? 'Проверка директором' : 'Решение РОП') : 'Утверждение'
 
   function withComment(action: (text: string) => Promise<AchievementDto>, done: string) {
     if (!comment.trim()) {
@@ -287,12 +297,14 @@ function Decision({ a, reviewer, busy, run }: DecisionProps) {
 
   return (
     <section className="card card--outline">
-      <p className="card__title">{approved ? 'Пересмотр' : reviewer ? 'Решение РОП' : 'Решение директора'}</p>
+      <p className="card__title">{title}</p>
       {!approved && (
         <p className="muted">
           {reviewer
-            ? 'Проверьте документы, авторство, дубли и расчёт доли.'
-            : 'В официальный итог результат войдёт только после вашего утверждения.'}
+            ? a.reviewer === 'DIRECTOR'
+              ? 'Заявитель — РОП, поэтому проверку данных выполняет директор. Утверждение — следующим отдельным решением.'
+              : 'Проверьте документы, авторство, дубли и расчёт доли.'
+            : 'Проверка пройдена. В официальный итог результат войдёт только после вашего утверждения.'}
         </p>
       )}
       <Field id="comment" label="Комментарий" error={missing ? 'Для возврата, отклонения и пересмотра нужен комментарий' : undefined}>
@@ -306,8 +318,13 @@ function Decision({ a, reviewer, busy, run }: DecisionProps) {
         ) : (
           <>
             {reviewer ? (
-              <button type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => reviewAchievement(a.id, comment.trim() || null), 'Проверено и передано директору.')}>
-                Проверено — директору
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={busy}
+                onClick={() => run(() => reviewAchievement(a.id, comment.trim() || null), 'Проверка пройдена, результат ждёт утверждения.')}
+              >
+                {a.reviewer === 'DIRECTOR' ? 'Проверено' : 'Проверено — директору'}
               </button>
             ) : (
               <button type="button" className="btn btn--primary" disabled={busy} onClick={() => run(() => approveAchievement(a.id, comment.trim() || null), 'Утверждено. Начисления вошли в итог.')}>
@@ -331,6 +348,7 @@ function Decision({ a, reviewer, busy, run }: DecisionProps) {
 function Evidence({ a, editable, onChange }: { a: AchievementDto; editable: boolean; onChange: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [docType, setDocType] = useState('')
+  const [requisites, setRequisites] = useState('')
   const [url, setUrl] = useState('')
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
@@ -341,11 +359,12 @@ function Evidence({ a, editable, onChange }: { a: AchievementDto; editable: bool
     setError(null)
     setBusy(true)
     try {
-      if (file) await uploadEvidence(a.id, file, docType)
-      else await addEvidenceLink(a.id, docType, url)
+      if (file) await uploadEvidence(a.id, file, docType.trim(), requisites.trim() || null)
+      else await addEvidenceLink(a.id, docType.trim(), url.trim(), requisites.trim() || null)
       setFile(null)
       setUrl('')
       setDocType('')
+      setRequisites('')
       ;(event.target as HTMLFormElement).reset()
       onChange()
     } catch (err) {
@@ -376,9 +395,12 @@ function Evidence({ a, editable, onChange }: { a: AchievementDto; editable: bool
               <a href={e.url} target="_blank" rel="noreferrer">
                 {e.url}
               </a>
+            ) : useMock ? (
+              <span title="Файлы хранит сервер: в режиме заглушек скачать нельзя">{e.fileName}</span>
             ) : (
-              <a href={`/api/achievements/${a.id}/evidence/${e.id}`}>{e.fileName}</a>
-            )}{' '}
+              <a href={evidenceFileUrl(a.id, e.id)}>{e.fileName}</a>
+            )}
+            {e.requisites && <span>, {e.requisites}</span>}{' '}
             <span className="muted">
               {fmtSize(e.size)} · {e.uploadedBy}, {fmtDateTime(e.uploadedAt)}
             </span>{' '}
@@ -392,11 +414,16 @@ function Evidence({ a, editable, onChange }: { a: AchievementDto; editable: bool
       </ul>
       {editable && (
         <form className="form" onSubmit={add}>
-          {error && !Object.keys(errors).length ? <p className="field__error">{errorText(error)}</p> : null}
-          <div className="form-row form-row--3">
-            <Field id="docType" label="Тип документа" hint="Копия статьи, сертификат, приказ…">
+          {error ? <p className="field__error">{errorText(error)}</p> : null}
+          <div className="form-row">
+            <Field id="docType" label="Тип документа" required error={errors.docType} hint="Копия статьи, сертификат, приказ…">
               <input id="docType" className="input" value={docType} onChange={(e) => setDocType(e.target.value)} />
             </Field>
+            <Field id="requisites" label="Реквизиты" hint="Номер и дата документа">
+              <input id="requisites" className="input" value={requisites} onChange={(e) => setRequisites(e.target.value)} />
+            </Field>
+          </div>
+          <div className="form-row">
             <Field id="file" label="Файл" hint="PDF, JPG или PNG до 10 МБ" error={errors.file}>
               <input id="file" type="file" className="input" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </Field>
@@ -404,7 +431,7 @@ function Evidence({ a, editable, onChange }: { a: AchievementDto; editable: bool
               <input id="url" className="input" value={url} disabled={!!file} placeholder="https://elibrary.ru/…" onChange={(e) => setUrl(e.target.value)} />
             </Field>
           </div>
-          <button type="submit" className="btn btn--outline btn--small" disabled={busy || (!file && !url.trim())}>
+          <button type="submit" className="btn btn--outline btn--small" disabled={busy || !docType.trim() || (!file && !url.trim())}>
             Добавить документ
           </button>
         </form>
@@ -416,7 +443,15 @@ function Evidence({ a, editable, onChange }: { a: AchievementDto; editable: bool
 /** Для проверяющего: возможные повторы этого достижения в реестре (ТЗ 5.2) */
 function DuplicatesCheck({ a }: { a: AchievementDto }) {
   const { data } = useLoad<DuplicateDto[]>(
-    () => checkDuplicates({ indicatorId: a.indicatorId, identifier: a.identifier, title: a.title, eventDate: a.eventDate, excludeId: a.id }),
+    () =>
+      checkDuplicates({
+        indicatorId: a.indicatorId,
+        identifierType: a.identifierType,
+        identifier: a.identifier,
+        title: a.title,
+        eventDate: a.eventDate,
+        excludeId: a.id,
+      }),
     `dups-${a.id}`,
   )
   if (!data) return null

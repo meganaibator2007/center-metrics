@@ -30,6 +30,8 @@ export function RequireRole({ roles }: { roles?: Role[] }) {
     const state = signedOut === 'manual' ? undefined : { from: location.pathname + location.search }
     return <Navigate to="/login" replace state={state} />
   }
+  // Временный пароль от админа: пока не сменён, остальные разделы недоступны
+  if (user.mustChangePassword && location.pathname !== '/password') return <Navigate to="/password" replace />
   if (roles && !hasRole(user, ...roles)) return <Navigate to="/403" replace />
   return <Outlet />
 }

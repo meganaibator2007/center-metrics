@@ -3,6 +3,7 @@
 
 import type {
   AccrualMethod,
+  AchievementType,
   Category,
   DecisionDto,
   DepartmentDto,
@@ -33,6 +34,7 @@ export interface StoredAchievement {
   programId: number | null
   discipline: string | null
   description: string | null
+  quantity?: number | null
   ownerId: number
   enteredBy: string | null
   basis: string | null
@@ -57,7 +59,11 @@ export interface StoredMeasurement {
   numerator: number | null
   denominator: number | null
   source: string | null
+  scale: string | null
+  documentBasis: string | null
   status: ResultStatus
+  lastComment: string | null
+  version: number
   enteredBy: string
   updatedAt: string
 }
@@ -104,13 +110,19 @@ function user(
     lastName,
     firstName,
     middleName,
+    externalId: `EMP-${String(id).padStart(4, '0')}`,
     roles,
     categories,
+    permissions: [],
     departmentId,
     departmentName: departments.find((d) => d.id === departmentId)?.name ?? null,
+    managerId: null,
     position,
     programIds,
+    // РОП проверяет программу, которой руководит
+    reviewProgramIds: roles.includes('REVIEWER') ? programIds : [],
     active: true,
+    mustChangePassword: false,
   }
 }
 
@@ -118,7 +130,7 @@ const users: UserDto[] = [
   user(1, 'e.smirnova', 'Смирнова', 'Елена', 'Викторовна', ['ADMIN'], [], 3, 'Администратор системы', []),
   user(2, 'a.ivanova', 'Иванова', 'Анна', 'Петровна', ['EMPLOYEE'], ['PPS'], 1, 'Доцент', [1]),
   user(3, 'p.sokolov', 'Соколов', 'Павел', 'Андреевич', ['EMPLOYEE'], ['PPS'], 1, 'Старший преподаватель', [1, 2]),
-  user(4, 'm.petrova', 'Петрова', 'Мария', 'Игоревна', ['EMPLOYEE', 'REVIEWER'], ['PPS', 'ROP'], 1, 'Доцент, руководитель ОП', [1]),
+  { ...user(4, 'm.petrova', 'Петрова', 'Мария', 'Игоревна', ['EMPLOYEE', 'REVIEWER'], ['PPS', 'ROP'], 1, 'Доцент, руководитель ОП', [1]), permissions: ['ENTER_FOR_OTHERS', 'IMPORT'] },
   user(5, 'd.orlov', 'Орлов', 'Дмитрий', 'Сергеевич', ['DIRECTOR'], [], 3, 'Директор центра', []),
   user(6, 'k.volkova', 'Волкова', 'Ксения', 'Андреевна', ['EMPLOYEE'], ['AUP'], 3, 'Специалист центра', []),
   user(7, 'i.lebedev', 'Лебедев', 'Игорь', 'Николаевич', ['EMPLOYEE'], ['PPS'], 2, 'Профессор', [2]),
@@ -134,6 +146,7 @@ function points(
   name: string,
   basePoints: number,
   accrualMethod: AccrualMethod,
+  achievementType: AchievementType,
   evidence: string,
   requiresProgram = false,
 ): IndicatorDto {
@@ -146,6 +159,7 @@ function points(
     unit: 'шт.',
     basePoints,
     accrualMethod,
+    achievementType,
     targetValue: null,
     percent: false,
     direction: null,
@@ -154,7 +168,12 @@ function points(
     maxRepeats: null,
     requiresProgram,
     evidence: requiresProgram ? `${evidence} ${ONLY_TOP_IT}` : evidence,
+    methodology: null,
+    required: false,
+    evidenceRequired: true,
     version: 1,
+    validFrom: '2026-01-01',
+    validTo: null,
     archived: false,
   }
 }
@@ -178,6 +197,7 @@ function target(
     unit,
     basePoints: null,
     accrualMethod: null,
+    achievementType: null,
     targetValue,
     percent,
     direction,
@@ -186,39 +206,44 @@ function target(
     maxRepeats: null,
     requiresProgram: true,
     evidence,
+    methodology: percent ? 'F = 100 × A / D; числитель и знаменатель — по отчёту РОП за период.' : null,
+    required: false,
+    evidenceRequired: true,
     version: 1,
+    validFrom: '2026-01-01',
+    validTo: null,
     archived: false,
   }
 }
 
 const indicators: IndicatorDto[] = [
-  points(1, 'ППС-01', 'PPS', 'Публикация статьи по теме ИТ в журналах Белого списка (1–2 уровень)', 20, 'SHARED',
+  points(1, 'ППС-01', 'PPS', 'Публикация статьи по теме ИТ в журналах Белого списка (1–2 уровень)', 20, 'SHARED', 'PUBLICATION',
     'Копия статьи, титульный лист и содержание журнала или ссылка на страницу в eLibrary.'),
-  points(2, 'ППС-02', 'PPS', 'Доклад на международной конференции по тематике ИТ уровня A*/A рейтинга CORE', 50, 'SHARED',
+  points(2, 'ППС-02', 'PPS', 'Доклад на международной конференции по тематике ИТ уровня A*/A рейтинга CORE', 50, 'SHARED', 'CONFERENCE',
     'Копия статьи, программа конференции.'),
-  points(3, 'ППС-03', 'PPS', 'Разработка УМК, согласованных с ИП', 5, 'SHARED',
+  points(3, 'ППС-03', 'PPS', 'Разработка УМК, согласованных с ИП', 5, 'SHARED', 'UMK_DOCUMENT',
     'Полный текст УМК, протокол заседания кафедры с утверждением.', true),
-  points(4, 'ППС-04', 'PPS', 'Разработка ФОС, согласованных с ИП', 5, 'SHARED',
+  points(4, 'ППС-04', 'PPS', 'Разработка ФОС, согласованных с ИП', 5, 'SHARED', 'UMK_DOCUMENT',
     'Полный текст ФОС, протокол заседания кафедры с утверждением.', true),
-  points(5, 'ППС-05', 'PPS', 'Разработка РПД, согласованных с ИП', 5, 'SHARED',
+  points(5, 'ППС-05', 'PPS', 'Разработка РПД, согласованных с ИП', 5, 'SHARED', 'UMK_DOCUMENT',
     'Полный текст РПД, протокол заседания кафедры с утверждением.', true),
-  points(6, 'ППС-06', 'PPS', 'Внедрение результатов НИР по тематике ИТ в учебный процесс', 15, 'SHARED',
+  points(6, 'ППС-06', 'PPS', 'Внедрение результатов НИР по тематике ИТ в учебный процесс', 15, 'SHARED', 'OTHER',
     'Копия договора или отчёта о НИР, справка о внедрении в учебный процесс от кафедры, реализующей дисциплину.', true),
-  points(7, 'ППС-07', 'PPS', 'Внедрение результатов проектов и опыта практической деятельности в сфере ИТ', 10, 'INDIVIDUAL',
+  points(7, 'ППС-07', 'PPS', 'Внедрение результатов проектов и опыта практической деятельности в сфере ИТ', 10, 'INDIVIDUAL', 'CONTRACT',
     'Договор (трудовой, ГПХ), акт о выполнении проекта, справка о внедрении от кафедры, реализующей дисциплину.', true),
-  points(8, 'ППС-08', 'PPS', 'Прохождение ДПО в сфере ИТ и методики обучения ИТ', 10, 'INDIVIDUAL',
+  points(8, 'ППС-08', 'PPS', 'Прохождение ДПО в сфере ИТ и методики обучения ИТ', 10, 'INDIVIDUAL', 'OTHER',
     'Документ о повышении квалификации или профессиональной переподготовке.'),
-  points(9, 'ППС-09', 'PPS', 'Личное участие в международных и национальных мероприятиях по тематике ИТ (кроме строки 2)', 5, 'INDIVIDUAL',
+  points(9, 'ППС-09', 'PPS', 'Личное участие в международных и национальных мероприятиях по тематике ИТ (кроме строки 2)', 5, 'INDIVIDUAL', 'EVENT',
     'Сертификат или диплом участника.'),
-  points(10, 'ППС-10', 'PPS', 'Подготовка студентов к международным и национальным мероприятиям и соревнованиям по ИТ', 5, 'INDIVIDUAL',
+  points(10, 'ППС-10', 'PPS', 'Подготовка студентов к международным и национальным мероприятиям и соревнованиям по ИТ', 5, 'INDIVIDUAL', 'EVENT',
     'Программа мероприятия с указанием руководителя или тренера команды.'),
-  points(11, 'АУП-01', 'AUP', 'Организация согласования и подписания договора, соглашения, доп. соглашения в рамках Программы Центра', 10, 'INDIVIDUAL',
+  points(11, 'АУП-01', 'AUP', 'Организация согласования и подписания договора, соглашения, доп. соглашения в рамках Программы Центра', 10, 'INDIVIDUAL', 'CONTRACT',
     'Подписанный договор, соглашение или дополнительное соглашение, направленное на реализацию программы Центра.'),
-  points(12, 'АУП-02', 'AUP', 'Организация командирования работников Центра на мероприятие в рамках программы Центра', 1, 'INDIVIDUAL',
+  points(12, 'АУП-02', 'AUP', 'Организация командирования работников Центра на мероприятие в рамках программы Центра', 1, 'INDIVIDUAL', 'OTHER',
     'Приказ о командировании.'),
-  points(13, 'АУП-03', 'AUP', 'Организация мероприятия Центра в рамках реализации программы Центра', 10, 'INDIVIDUAL',
+  points(13, 'АУП-03', 'AUP', 'Организация мероприятия Центра в рамках реализации программы Центра', 10, 'INDIVIDUAL', 'EVENT',
     'Приказ о мероприятии, пост-релиз или программа мероприятия с указанием оргкомитета.'),
-  points(14, 'АУП-04', 'AUP', 'Своевременная сдача и полнота ежеквартальной и годовой отчётности', 5, 'INDIVIDUAL',
+  points(14, 'АУП-04', 'AUP', 'Своевременная сдача и полнота ежеквартальной и годовой отчётности', 5, 'INDIVIDUAL', 'OTHER',
     'Ежеквартальный или годовой отчёт.'),
   target(15, 'РОП-01', 'Количество студентов, принятых на ОП топ-ИТ', 101, 'чел.', false, 'Приказы о зачислении.'),
   target(16, 'РОП-02', 'Доля студентов ОП топ-ИТ, успешно прошедших аттестацию', 80, '%', true, 'Ведомости промежуточной аттестации.'),
@@ -247,10 +272,10 @@ function event(action: DecisionDto['action'], actor: string, at: string, comment
 
 let evidenceId = 1
 function file(docType: string, fileName: string, size: number, at: string, by: string): EvidenceDto {
-  return { id: evidenceId++, docType, fileName, size, url: null, uploadedAt: at, uploadedBy: by }
+  return { id: evidenceId++, docType, requisites: null, fileName, size, url: null, version: 1, uploadedAt: at, uploadedBy: by }
 }
 function link(docType: string, url: string, at: string, by: string): EvidenceDto {
-  return { id: evidenceId++, docType, fileName: null, size: null, url, uploadedAt: at, uploadedBy: by }
+  return { id: evidenceId++, docType, requisites: null, fileName: null, size: null, url, version: 1, uploadedAt: at, uploadedBy: by }
 }
 
 const IVANOVA = 'Иванова Анна Петровна'
@@ -481,18 +506,22 @@ function m(
   id: number, indicatorId: number, programId: number, status: ResultStatus, enteredBy: string,
   value: number | null, numerator: number | null = null, denominator: number | null = null, source: string | null = null,
 ): StoredMeasurement {
-  return { id, indicatorId, periodId: 2, programId, value, numerator, denominator, source, status, enteredBy, updatedAt: '2026-11-03T10:00:00Z' }
+  const scale = indicatorId === 24 || indicatorId === 25 ? 'Шкала 1–5, анкетирование' : null
+  return {
+    id, indicatorId, periodId: 2, programId, value, numerator, denominator, source, scale, documentBasis: null,
+    status, lastComment: null, version: 1, enteredBy, updatedAt: '2026-11-03T10:00:00Z',
+  }
 }
 
 const measurements: StoredMeasurement[] = [
   m(1, 15, 1, 'APPROVED', PETROVA, 112, null, null, 'Приказы о зачислении № 2140-с, 2215-с'),
   m(2, 16, 1, 'APPROVED', PETROVA, null, 87, 112, 'Ведомости зимней сессии'),
-  m(3, 17, 1, 'REVIEWED', PETROVA, null, 41, 112, 'Отчёт руководителя ОП'),
+  m(3, 17, 1, 'ON_REVIEW', PETROVA, null, 41, 112, 'Отчёт руководителя ОП'),
   m(4, 18, 1, 'REVIEWED', PETROVA, null, 3, 19, 'Договоры ГПХ'),
   m(5, 21, 1, 'APPROVED', PETROVA, 2, null, null, 'Пост-релизы на сайте'),
   m(6, 24, 1, 'DRAFT', PETROVA, 4.3, null, null, 'Анкетирование, 96 ответов'),
   m(7, 15, 2, 'APPROVED', KOZLOVA, 88, null, null, 'Приказы о зачислении'),
-  m(8, 16, 2, 'REVIEWED', KOZLOVA, null, 70, 88, 'Ведомости зимней сессии'),
+  m(8, 16, 2, 'ON_REVIEW', KOZLOVA, null, 70, 88, 'Ведомости зимней сессии'),
   m(9, 19, 2, 'APPROVED', KOZLOVA, 1, null, null, 'Протокол экспертного совета № 4'),
 ]
 
