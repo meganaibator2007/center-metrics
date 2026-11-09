@@ -874,8 +874,9 @@ paths:
       parameters:
         - name: scope
           in: query
-          description: '`my` — свои и где соавтор, `review` — очередь РОП, `approval` — очередь директора, `registry`
-            — всё доступное'
+          description: '`my` — свои и где соавтор, `review` — очередь РОП: `ON_REVIEW` с `reviewer` = ROP в его
+            области, `approval` — всё, что ждёт директора: `REVIEWED` и `ON_REVIEW` с `reviewer` = DIRECTOR, `registry`
+            — всё доступное. В `review` и `approval` не попадают достижения, где пользователь участник'
           required: true
           schema:
             type: string
@@ -956,7 +957,8 @@ paths:
     post:
       tags: [Достижения]
       summary: Поиск повторов до сохранения
-      description: Доступ — вошедшие.
+      description: Доступ — вошедшие. Совпадение вида достижения и DOI или номера документа — `STRICT`. Ссылка строгим
+        ключом не считается, совпадение по ней — `SIMILAR`.
       operationId: checkDuplicates
       security:
         - session: []
@@ -2951,11 +2953,16 @@ components:
     DuplicateQuery:
       type: object
       description: Поиск повторов до сохранения.
-      required: [indicatorId, identifier, title, eventDate, excludeId]
+      required: [indicatorId, identifierType, identifier, title, eventDate, excludeId]
       properties:
         indicatorId:
           type: integer
           format: int64
+        identifierType:
+          oneOf:
+            - $ref: '#/components/schemas/IdentifierType'
+            - type: 'null'
+          description: Вид идентификатора; null, если его нет
         identifier:
           type: [string, 'null']
         title:
