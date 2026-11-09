@@ -1,7 +1,7 @@
 // Формы данных, которыми обмениваются клиент и сервер.
-// Модель повторяет ТЗ «Система учёта показателей эффективности» (разделы 2–6, 11.1)
-// и «Порядок начисления баллов». Это предложение контракта для openapi.yaml:
-// меняется контракт — правим и этот файл.
+// Повторяет контракт app/src/main/resources/static/openapi.yaml (ветка backend-first-stage, #136),
+// он построен по ТЗ «Система учёта показателей эффективности» и «Порядку начисления баллов».
+// Меняется контракт — правим и этот файл.
 
 // ---------- Общее ----------
 
@@ -42,6 +42,9 @@ export type Role = 'EMPLOYEE' | 'REVIEWER' | 'DIRECTOR' | 'ADMIN'
 /** Категории оценки (ТЗ 1.2): у сотрудника может быть несколько */
 export type Category = 'PPS' | 'AUP' | 'ROP'
 
+/** Отдельные полномочия: импорт, ввод за другого сотрудника, самостоятельный ввод АУП (ТЗ 2.2, 4.2) */
+export type Permission = 'IMPORT' | 'ENTER_FOR_OTHERS' | 'AUP_SELF_ENTRY'
+
 export interface DepartmentDto {
   id: number
   name: string
@@ -64,15 +67,23 @@ export interface UserDto {
   lastName: string
   firstName: string
   middleName: string | null
+  /** Стабильный внешний идентификатор сотрудника (импорт) */
+  externalId: string | null
   roles: Role[]
   categories: Category[]
+  permissions: Permission[]
   departmentId: number | null
   departmentName: string | null
+  managerId: number | null
   position: string | null
-  /** Программы сотрудника; у РОП — его область проверки (scope) */
+  /** Программы, к которым привязан сотрудник */
   programIds: number[]
+  /** Область проверки РОП (scope): обязательна при роли REVIEWER */
+  reviewProgramIds: number[]
   /** false — учётная запись деактивирована */
   active: boolean
+  /** Пароль временный: после входа нужно сменить */
+  mustChangePassword: boolean
 }
 
 export interface UserRequest {
@@ -85,8 +96,21 @@ export interface UserRequest {
   departmentId: number | null
   position: string | null
   programIds: number[]
+  reviewProgramIds: number[]
+  permissions: Permission[]
+  managerId: number | null
+  externalId: string | null
   /** Временный пароль: обязателен при создании, при изменении игнорируется */
   password: string | null
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface ResetPasswordRequest {
+  password: string
 }
 
 export interface LoginRequest {
@@ -112,6 +136,9 @@ export type AccrualMethod = 'INDIVIDUAL' | 'SHARED'
 /** Направление сравнения с целевым значением (ТЗ 6.3) */
 export type TargetDirection = 'AT_LEAST' | 'AT_MOST'
 
+/** Вид достижения у балльного показателя: по нему ищутся дубли (ТЗ 5.2) */
+export type AchievementType = 'PUBLICATION' | 'UMK_DOCUMENT' | 'EVENT' | 'CONTRACT' | 'CONFERENCE' | 'OTHER'
+
 export interface IndicatorDto {
   id: number
   /** Код показателя: ППС-01, АУП-04, РОП-11 */
@@ -124,6 +151,8 @@ export interface IndicatorDto {
   basePoints: number | null
   /** Порядок начисления; null у целевых показателей */
   accrualMethod: AccrualMethod | null
+  /** Вид достижения; null у целевых показателей */
+  achievementType: AchievementType | null
   /** Целевое значение T; null у балльных показателей */
   targetValue: number | null
   /** Факт считается как процент: числитель / знаменатель × 100 */
@@ -139,10 +168,20 @@ export interface IndicatorDto {
   requiresProgram: boolean
   /** Подтверждающие документы, как в «Порядке начисления баллов» */
   evidence: string
+  /** Методика: числитель и знаменатель, шкала, источник (для РОП) */
+  methodology: string | null
+  /** Обязательный показатель */
+  required: boolean
+  /** Без подтверждающего документа не отправить */
+  evidenceRequired: boolean
   /** Редакция показателя; новая редакция не меняет утверждённые результаты */
   version: number
+  validFrom: IsoDate
+  validTo: IsoDate | null
   archived: boolean
 }
+
+export type IndicatorVersionDto = Omit<IndicatorDto, 'id' | 'code' | 'archived'> & { createdAt: IsoDateTime }
 
 export interface IndicatorRequest {
   code: string
@@ -152,6 +191,7 @@ export interface IndicatorRequest {
   unit: string
   basePoints: number | null
   accrualMethod: AccrualMethod | null
+  achievementType: AchievementType | null
   targetValue: number | null
   percent: boolean
   direction: TargetDirection | null
@@ -160,11 +200,16 @@ export interface IndicatorRequest {
   maxRepeats: number | null
   requiresProgram: boolean
   evidence: string
+  methodology: string | null
+  required: boolean
+  evidenceRequired: boolean
+  /** С какой даты действует новая редакция; пусто — с сегодняшней */
+  validFrom: IsoDate | null
 }
 
 // ---------- Отчётные периоды (ФР-09) ----------
 
-export type PeriodType = 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR' | 'CUSTOM'
+export type PeriodType = 'MONTH' | 'QUARTER' | 'SEMESTER' | 'HALF_YEAR' | 'YEAR' | 'ACADEMIC_YEAR' | 'CUSTOM'
 
 export interface PeriodDto {
   id: number
@@ -217,16 +262,21 @@ export interface ParticipantRequest {
   /** ФИО внешнего соавтора; для сотрудника не нужно */
   fullName: string | null
   weight: number
+  /** Обоснование неравного веса */
+  basis?: string | null
 }
 
 export interface EvidenceDto {
   id: number
   /** Тип документа: «Копия статьи», «Сертификат участника»… */
   docType: string
+  /** Реквизиты документа: номер, дата */
+  requisites: string | null
   /** Файл или ссылка: заполнено одно из двух */
   fileName: string | null
   size: number | null
   url: string | null
+  version: number
   uploadedAt: IsoDateTime
   uploadedBy: string
 }
@@ -256,6 +306,7 @@ export interface AchievementDto {
   indicatorCode: string
   indicatorName: string
   category: Category
+  achievementType: AchievementType
   periodId: number
   periodName: string
   title: string
@@ -267,6 +318,7 @@ export interface AchievementDto {
   /** Дисциплина учебного плана (показатели ППС 3–7) */
   discipline: string | null
   description: string | null
+  quantity: number | null
   /** Кто подал заявку */
   owner: PersonShort
   /** Административный ввод за сотрудника: кто ввёл и на каком основании (ТЗ 2.2) */
@@ -279,6 +331,8 @@ export interface AchievementDto {
   status: ResultStatus
   /** Кто проверяет: РОП или, если заявитель сам РОП, директор (ТЗ 2.2, запрет конфликта интересов) */
   reviewer: 'ROP' | 'DIRECTOR'
+  /** Найдена похожая запись: проверяющий решает, дубль ли это */
+  possibleDuplicate: boolean
   /** Последнее замечание при возврате или причина отклонения */
   lastComment: string | null
   evidence: EvidenceDto[]
@@ -299,6 +353,7 @@ export interface AchievementRequest {
   programId: number | null
   discipline: string | null
   description: string | null
+  quantity?: number | null
   /** Сам заявитель добавляется сервером, здесь только соавторы */
   coauthors: ParticipantRequest[]
   /** Административный ввод: за кого и на каком основании */
@@ -347,8 +402,13 @@ export interface MeasurementDto {
   /** Δ = F − T */
   deviation: number | null
   achieved: boolean | null
+  /** Шкала для показателей удовлетворённости */
+  scale: string | null
   source: string | null
+  documentBasis: string | null
   status: ResultStatus
+  lastComment: string | null
+  version: number
   enteredBy: string
   updatedAt: IsoDateTime
 }
@@ -361,6 +421,8 @@ export interface MeasurementRequest {
   numerator: number | null
   denominator: number | null
   source: string | null
+  scale?: string | null
+  documentBasis?: string | null
 }
 
 // ---------- Баллы сотрудника (ТЗ 6.2, 8.2) ----------

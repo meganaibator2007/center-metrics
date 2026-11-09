@@ -1,6 +1,6 @@
 import { request } from './client'
 import { query } from './org'
-import type { Category, EvaluationType, IndicatorDto, IndicatorRequest } from './types'
+import type { Category, EvaluationType, IndicatorDto, IndicatorRequest, IndicatorVersionDto } from './types'
 
 export interface IndicatorFilter {
   category?: Category
@@ -15,3 +15,5 @@ export const createIndicator = (data: IndicatorRequest) => request<IndicatorDto>
 export const updateIndicator = (id: number, data: IndicatorRequest) => request<IndicatorDto>('PUT', `/indicators/${id}`, data)
 /** В архив и обратно */
 export const toggleArchive = (id: number) => request<IndicatorDto>('POST', `/indicators/${id}/archive`)
+/** История редакций показателя */
+export const indicatorVersions = (id: number) => request<IndicatorVersionDto[]>('GET', `/indicators/${id}/versions`)

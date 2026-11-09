@@ -20,11 +20,15 @@ const NAV: NavItem[] = [
   { to: '/registry', label: 'Реестр', roles: ['REVIEWER', 'DIRECTOR', 'ADMIN'] },
   { to: '/analytics', label: 'Аналитика', roles: ['REVIEWER', 'DIRECTOR', 'ADMIN'] },
   { to: '/reports', label: 'Отчёты', roles: ALL },
+  { to: '/admin/periods', label: 'Периоды', roles: ['DIRECTOR'] },
   { to: '/admin', label: 'Администрирование', roles: ['ADMIN'] },
 ]
 
 export function navFor(user: UserDto): NavItem[] {
-  return NAV.filter((item) => item.roles.some((role) => user.roles.includes(role))).map((item) =>
+  return NAV.filter((item) => item.roles.some((role) => user.roles.includes(role)))
+    // У админа периоды — в разделе «Администрирование»
+    .filter((item) => !(item.to === '/admin/periods' && user.roles.includes('ADMIN')))
+    .map((item) =>
     // У суперадминистратора без роли сотрудника это раздел административного ввода
     item.to === '/my/achievements' && !user.roles.includes('EMPLOYEE') ? { ...item, label: 'Ввод результатов' } : item,
   )

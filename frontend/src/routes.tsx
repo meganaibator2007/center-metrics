@@ -17,6 +17,7 @@ import { MyIndicatorsPage } from './pages/home/MyIndicatorsPage'
 import { AnalyticsPage } from './pages/reports/AnalyticsPage'
 import { ReportsPage } from './pages/reports/ReportsPage'
 import { TargetsPage } from './pages/targets/TargetsPage'
+import { ChangePasswordPage } from './pages/user/ChangePasswordPage'
 import { LoginPage } from './pages/user/LoginPage'
 
 // Разделы интерфейса по ТЗ, раздел 10. RequireRole — удобство: права проверяет сервер.
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <HomePage /> },
           { path: 'achievements/:id', element: <AchievementPage /> },
+          { path: 'password', element: <ChangePasswordPage /> },
           { path: 'reports', element: <ReportsPage /> },
         ],
       },
@@ -64,6 +66,10 @@ export const router = createBrowserRouter([
         ],
       },
       {
+        element: <RequireRole roles={['ADMIN', 'DIRECTOR']} />,
+        children: [{ path: 'admin/periods', element: <PeriodsPage /> }],
+      },
+      {
         path: 'admin',
         element: <RequireRole roles={['ADMIN']} />,
         children: [
@@ -74,7 +80,6 @@ export const router = createBrowserRouter([
           { path: 'indicators', element: <IndicatorsPage /> },
           { path: 'indicators/new', element: <IndicatorFormPage /> },
           { path: 'indicators/:id', element: <IndicatorFormPage /> },
-          { path: 'periods', element: <PeriodsPage /> },
           { path: 'import', element: <ImportPage /> },
           { path: 'audit', element: <AuditPage /> },
         ],
