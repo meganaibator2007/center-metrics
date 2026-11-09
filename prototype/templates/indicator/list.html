@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Справочник показателей — Показатели центра</title>
+  <link rel="icon" href="../../static/img/sign-color.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../../static/css/main.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="container">
+      <span class="topbar__product">Финансовый университет · Система учёта показателей деятельности центра</span>
+      <div class="topbar__user">
+        <span class="badge badge--role badge--plain">Администратор</span>
+        <span>Смирнова Елена Викторовна</span>
+        <a href="../user/login.html">Выйти</a>
+      </div>
+    </div>
+  </div>
+  <header class="header">
+    <div class="container">
+      <a class="header__brand" href="../report/control.html">
+        <img class="header__logo" src="../../static/img/logo-color.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="159" height="52">
+        <span class="header__product">Показатели<br>деятельности центра</span>
+      </a>
+      <nav class="nav" aria-label="Основное меню">
+        <a href="../report/control.html">Контроль сдачи</a>
+        <a href="../report/summary.html">Сводный отчёт</a>
+        <a href="../indicator/list.html" aria-current="page">Показатели</a>
+        <a href="../period/list.html">Периоды</a>
+        <a href="../user/list.html">Пользователи</a>
+        <a href="../common/stub.html#dashboard">Дашборд <span class="soon">скоро</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="page">
+    <div class="container">
+      <ol class="breadcrumbs" aria-label="Навигационная цепочка">
+        <li><a href="../report/control.html">Главная</a></li>
+        <li aria-current="page">Справочник показателей</li>
+      </ol>
+      <div class="page-head">
+        <div>
+          <h1>Справочник показателей</h1>
+          <p class="page-head__lead">Показатели, по которым преподаватели отчитываются. Изменение коэффициента пересчитает баллы только в открытых периодах.</p>
+        </div>
+        <div class="page-head__actions">
+          <a class="btn btn--primary" href="form.html">Добавить показатель</a>
+        </div>
+      </div>
+
+      <ul class="tabs">
+        <li><a href="list.html" aria-current="page">Все разделы</a></li>
+        <li><a href="list.html?category=teaching">Учебная работа</a></li>
+        <li><a href="list.html?category=science">Научная работа</a></li>
+        <li><a href="list.html?category=method">Методическая работа</a></li>
+        <li><a href="list.html?category=education">Воспитательная работа</a></li>
+      </ul>
+
+      <form class="filters" action="list.html" method="get">
+        <div class="field field--grow">
+          <label class="field__label" for="q">Поиск по названию</label>
+          <input class="input" id="q" type="search" placeholder="Например, статья">
+        </div>
+        <div class="field">
+          <label class="field__label" for="state">Статус</label>
+          <select class="select" id="state">
+            <option selected>Активные и архив</option>
+            <option>Только активные</option>
+            <option>Только архив</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox"> Только обязательные</label>
+        <button class="btn btn--outline" type="submit">Найти</button>
+      </form>
+
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th scope="col" class="num">№</th>
+              <th scope="col">Показатель</th>
+              <th scope="col">Ед. изм.</th>
+              <th scope="col" class="num">Коэф.</th>
+              <th scope="col" class="num">Макс. балл</th>
+              <th scope="col">Обязательность</th>
+              <th scope="col">Статус</th>
+              <th scope="col"><span class="visually-hidden">Действия</span></th>
+            </tr>
+          </thead>
+          <tbody>
+              <tr>
+                <td class="num">1</td>
+                <td>Разработка рабочей программы дисциплины<span class="cell-sub">Учебная работа</span></td>
+                <td>шт.</td>
+                <td class="num">6</td>
+                <td class="num">18</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">2</td>
+                <td>Руководство выпускными квалификационными работами<span class="cell-sub">Учебная работа</span></td>
+                <td>чел.</td>
+                <td class="num">2</td>
+                <td class="num">20</td>
+                <td><span class="badge badge--returned badge--plain">Обязательный</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">3</td>
+                <td>Проведение открытого занятия<span class="cell-sub">Учебная работа</span></td>
+                <td>шт.</td>
+                <td class="num">4</td>
+                <td class="num">8</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">4</td>
+                <td>Статья в журнале из перечня ВАК<span class="cell-sub">Научная работа</span></td>
+                <td>шт.</td>
+                <td class="num">10</td>
+                <td class="num">40</td>
+                <td><span class="badge badge--returned badge--plain">Обязательный</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">5</td>
+                <td>Статья в журнале РИНЦ<span class="cell-sub">Научная работа</span></td>
+                <td>шт.</td>
+                <td class="num">5</td>
+                <td class="num">20</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">6</td>
+                <td>Доклад на научной конференции<span class="cell-sub">Научная работа</span></td>
+                <td>шт.</td>
+                <td class="num">3</td>
+                <td class="num">15</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">7</td>
+                <td>Учебное пособие<span class="cell-sub">Методическая работа</span></td>
+                <td>п. л.</td>
+                <td class="num">4</td>
+                <td class="num">32</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">8</td>
+                <td>Повышение квалификации<span class="cell-sub">Методическая работа</span></td>
+                <td>ч</td>
+                <td class="num">0,1</td>
+                <td class="num">10</td>
+                <td><span class="badge badge--returned badge--plain">Обязательный</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">9</td>
+                <td>Кураторство учебной группы<span class="cell-sub">Воспитательная работа</span></td>
+                <td>группа</td>
+                <td class="num">5</td>
+                <td class="num">10</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td class="num">10</td>
+                <td>Подготовка студентов к олимпиадам и конкурсам<span class="cell-sub">Воспитательная работа</span></td>
+                <td>чел.</td>
+                <td class="num">3</td>
+                <td class="num">15</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--open">Активен</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--outline" href="form.html">Изменить</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#fields">Поля формы</a>
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">В архив</a>
+                  </div>
+                </td>
+              </tr>
+              <tr class="row--muted">
+                <td class="num">11</td>
+                <td>Статья в журнале Scopus / Web of Science<span class="cell-sub">Научная работа · в архиве с 01.09.2026</span></td>
+                <td>шт.</td>
+                <td class="num">15</td>
+                <td class="num">45</td>
+                <td><span class="muted">—</span></td>
+                <td><span class="badge badge--closed">В архиве</span></td>
+                <td>
+                  <div class="cell-actions">
+                    <a class="btn btn--small btn--secondary" href="../common/stub.html#archive">Вернуть из архива</a>
+                  </div>
+                </td>
+              </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-footer"><span>Показатель, по которому уже есть данные, не удаляется, а переносится в архив — старые отчёты остаются целыми.</span></p>
+    </div>
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <div>
+        <img class="footer__logo" src="../../static/img/logo-white.svg" alt="Финансовый университет при Правительстве Российской Федерации" width="190" height="61">
+        <p class="footer__text">Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический расчёт баллов, отчёты для руководства</p>
+      </div>
+      <div>
+        <p class="footer__label">Помощь</p>
+        <ul class="footer__links">
+          <li><a href="../common/stub.html#help">Справка для пользователей</a></li>
+          <li><a href="../common/stub.html#privacy">Обработка персональных данных (152-ФЗ)</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="footer__label">О проекте</p>
+        <p class="footer__text">Учебный командный проект группы ПИ25-1<br>Факультет информационных технологий и анализа больших данных</p>
+      </div>
+      <div class="footer__bottom">
+        <span>© 2026 Команда center-metrics</span>
+        <span>Прототип интерфейса · все данные вымышленные</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
