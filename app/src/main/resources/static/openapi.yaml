@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: center-metrics API
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    Контракт API системы учёта показателей деятельности центра.
+    Контракт API системы учёта показателей эффективности. Основание — ТЗ «Система учёта показателей эффективности».
     Это план: большая часть методов ещё не реализована. Что уже работает в коде,
     видно в Swagger UI на вкладке «Реализовано в коде».
 
@@ -19,22 +19,21 @@ info:
     **Ошибки** приходят в формате ProblemDetail (RFC 9457). Ошибки по полям формы —
     в свойстве `errors`: имя поля → текст.
 
-    **Роли.** `TEACHER` — преподаватель, видит только свои данные. `ADMIN` — администратор.
-    Чужие данные → 403.
-
+    **Роли.** `EMPLOYEE` — сотрудник, `REVIEWER` — проверяющий (РОП) в своей области,
+    `DIRECTOR` — директор, `ADMIN` — суперадминистратор. У человека их может быть несколько.
+    Администратор не заменяет директора при утверждении.
 tags:
   - name: Вход и система
-  - name: Пользователи
-  - name: Категории и показатели
+  - name: Сотрудники и оргструктура
+  - name: Показатели
   - name: Отчётные периоды
-  - name: Записи и файлы
-  - name: Кабинет и отчёты
-  - name: После защиты
-    description: Методы второго этапа, после MVP.
-
+  - name: Достижения
+  - name: Целевые показатели РОП
+  - name: Баллы и дашборды
+  - name: Отчёты
+  - name: Журнал и импорт
 security:
   - session: []
-
 paths:
   /api/auth/csrf:
     get:
@@ -45,18 +44,12 @@ paths:
       security: []
       responses:
         '204':
-          description: Cookie `XSRF-TOKEN` выдана
-          headers:
-            Set-Cookie:
-              schema:
-                type: string
-              example: XSRF-TOKEN=4d1b...; Path=/
-
+          description: Cookie выдана
   /api/auth/login:
     post:
       tags: [Вход и система]
       summary: Вход
-      description: Доступ — все. При успехе сервер создаёт сессию и возвращает текущего пользователя.
+      description: Доступ — все. При успехе создаёт сессию.
       operationId: login
       security:
         - csrf: []
@@ -68,7 +61,7 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Вход выполнен, cookie `JSESSIONID` выдана
+          description: Вход выполнен
           content:
             application/json:
               schema:
@@ -76,19 +69,18 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
-          description: Неверный логин или пароль, либо пользователь заблокирован
+          description: Неверный логин или пароль, либо учётная запись деактивирована
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '403':
           $ref: '#/components/responses/Forbidden'
-
   /api/auth/logout:
     post:
       tags: [Вход и система]
       summary: Выход
-      description: Доступ — вошедшие. Сессия завершается.
+      description: Доступ — вошедшие.
       operationId: logout
       security:
         - session: []
@@ -96,12 +88,13 @@ paths:
       responses:
         '204':
           description: Выход выполнен
-
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/auth/me:
     get:
       tags: [Вход и система]
       summary: Текущий пользователь
-      description: Доступ — вошедшие. Клиент вызывает при загрузке, чтобы узнать, есть ли сессия.
+      description: Доступ — вошедшие.
       operationId: getCurrentUser
       responses:
         '200':
@@ -112,7 +105,30 @@ paths:
                 $ref: '#/components/schemas/UserDto'
         '401':
           $ref: '#/components/responses/Unauthorized'
-
+  /api/auth/password:
+    post:
+      tags: [Вход и система]
+      summary: Смена своего пароля
+      description: Доступ — вошедшие. Снимает признак временного пароля.
+      operationId: changePassword
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Пароль изменён
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/health:
     get:
       tags: [Вход и система]
@@ -123,30 +139,17 @@ paths:
       responses:
         '200':
           description: Сервер работает
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: UP
         '503':
           description: Сервер запущен, но база недоступна
           content:
-            application/json:
+            application/problem+json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: DOWN
-
+                $ref: '#/components/schemas/ProblemDetail'
   /api/users:
     get:
-      tags: [Пользователи]
-      summary: Список пользователей
-      description: Доступ — админ. Постранично, с поиском и фильтрами.
+      tags: [Сотрудники и оргструктура]
+      summary: Список сотрудников
+      description: Доступ — админ, директор.
       operationId: listUsers
       parameters:
         - name: q
@@ -158,33 +161,36 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/Role'
-        - name: department
+        - name: category
           in: query
-          description: Кафедра, точное совпадение
           schema:
-            type: string
+            $ref: '#/components/schemas/Category'
+        - name: departmentId
+          in: query
+          schema:
+            type: integer
+            format: int64
         - name: active
           in: query
-          description: true — активные, false — заблокированные, без параметра — все
           schema:
             type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
       responses:
         '200':
-          description: Страница пользователей
+          description: Страница
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserPage'
+                $ref: '#/components/schemas/PageOfUsers'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
     post:
-      tags: [Пользователи]
-      summary: Создание пользователя
-      description: Доступ — админ. Пользователь входит по логину и временному паролю.
+      tags: [Сотрудники и оргструктура]
+      summary: Создание сотрудника
+      description: Доступ — админ.
       operationId: createUser
       security:
         - session: []
@@ -197,7 +203,7 @@ paths:
               $ref: '#/components/schemas/UserRequest'
       responses:
         '201':
-          description: Пользователь создан
+          description: Создан
           content:
             application/json:
               schema:
@@ -209,23 +215,22 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: Логин уже занят
+          description: Логин или внешний идентификатор уже заняты
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
   /api/users/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
     get:
-      tags: [Пользователи]
-      summary: Карточка пользователя
-      description: Доступ — админ.
+      tags: [Сотрудники и оргструктура]
+      summary: Карточка сотрудника
+      description: Доступ — админ, директор.
       operationId: getUser
+      parameters:
+        - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Пользователь
+          description: Сотрудник
           content:
             application/json:
               schema:
@@ -237,13 +242,16 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     put:
-      tags: [Пользователи]
-      summary: Изменение пользователя
-      description: Доступ — админ. Пароль здесь не меняется, поле `password` игнорируется.
+      tags: [Сотрудники и оргструктура]
+      summary: Изменение сотрудника
+      description: Доступ — админ. Смена подразделения пишется в историю переводов, смена ролей закрывает прежние
+        назначения.
       operationId: updateUser
       security:
         - session: []
           csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
       requestBody:
         required: true
         content:
@@ -252,7 +260,7 @@ paths:
               $ref: '#/components/schemas/UserRequest'
       responses:
         '200':
-          description: Пользователь изменён
+          description: Изменён
           content:
             application/json:
               schema:
@@ -266,36 +274,37 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Логин уже занят
+          description: Логин или внешний идентификатор уже заняты
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
   /api/users/{id}/active:
-    parameters:
-      - $ref: '#/components/parameters/Id'
     patch:
-      tags: [Пользователи]
-      summary: Блокировка и разблокировка
-      description: Доступ — админ. Заблокированный пользователь не может войти. Себя заблокировать нельзя.
+      tags: [Сотрудники и оргструктура]
+      summary: Активация и деактивация
+      description: Доступ — админ.
       operationId: setUserActive
       security:
         - session: []
           csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserActiveRequest'
+              $ref: '#/components/schemas/ActiveRequest'
       responses:
         '200':
-          description: Статус изменён
+          description: Готово
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -303,34 +312,101 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Попытка заблокировать самого себя
+          description: Нельзя деактивировать собственную учётную запись
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
-  /api/categories:
+  /api/users/{id}/reset-password:
+    post:
+      tags: [Сотрудники и оргструктура]
+      summary: Выдача временного пароля
+      description: 'Доступ — админ. Восстановление доступа: при следующем входе пароль нужно сменить.'
+      operationId: resetPassword
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '204':
+          description: Пароль выдан
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/users/{id}/history:
     get:
-      tags: [Категории и показатели]
-      summary: Список категорий
-      description: Доступ — вошедшие.
-      operationId: listCategories
+      tags: [Сотрудники и оргструктура]
+      summary: История переводов
+      description: Доступ — админ, директор.
+      operationId: getUserHistory
+      parameters:
+        - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Категории
+          description: История
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CategoryDto'
+                  $ref: '#/components/schemas/EmploymentRecordDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/employees:
+    get:
+      tags: [Сотрудники и оргструктура]
+      summary: Активные сотрудники
+      description: Доступ — вошедшие. Для выбора соавторов.
+      operationId: listEmployees
+      responses:
+        '200':
+          description: Сотрудники
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PersonShort'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/departments:
+    get:
+      tags: [Сотрудники и оргструктура]
+      summary: Подразделения
+      description: Доступ — вошедшие.
+      operationId: listDepartments
+      responses:
+        '200':
+          description: Подразделения
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentDto'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
-      tags: [Категории и показатели]
-      summary: Создание категории
+      tags: [Сотрудники и оргструктура]
+      summary: Создание подразделения
       description: Доступ — админ.
-      operationId: createCategory
+      operationId: createDepartment
       security:
         - session: []
           csrf: []
@@ -339,45 +415,50 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CategoryRequest'
+              $ref: '#/components/schemas/DepartmentRequest'
       responses:
         '201':
-          description: Категория создана
+          description: Создано
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CategoryDto'
+                $ref: '#/components/schemas/DepartmentDto'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-
-  /api/categories/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
+        '409':
+          description: Такое подразделение уже есть
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/departments/{id}:
     put:
-      tags: [Категории и показатели]
-      summary: Изменение категории
+      tags: [Сотрудники и оргструктура]
+      summary: Изменение подразделения
       description: Доступ — админ.
-      operationId: updateCategory
+      operationId: updateDepartment
       security:
         - session: []
           csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CategoryRequest'
+              $ref: '#/components/schemas/DepartmentRequest'
       responses:
         '200':
-          description: Категория изменена
+          description: Изменено
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CategoryDto'
+                $ref: '#/components/schemas/DepartmentDto'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -386,32 +467,117 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-
+        '409':
+          description: Такое подразделение уже есть
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/programs:
+    get:
+      tags: [Сотрудники и оргструктура]
+      summary: Образовательные программы
+      description: Доступ — вошедшие.
+      operationId: listPrograms
+      responses:
+        '200':
+          description: Программы
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgramDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Сотрудники и оргструктура]
+      summary: Создание программы
+      description: Доступ — админ.
+      operationId: createProgram
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramRequest'
+      responses:
+        '201':
+          description: Создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Код программы уже занят
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/programs/{id}:
+    put:
+      tags: [Сотрудники и оргструктура]
+      summary: Изменение программы
+      description: Доступ — админ.
+      operationId: updateProgram
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramRequest'
+      responses:
+        '200':
+          description: Изменена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Код программы уже занят
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/indicators:
     get:
-      tags: [Категории и показатели]
-      summary: Список показателей
-      description: Доступ — вошедшие. Преподаватель видит только неархивные показатели.
+      tags: [Показатели]
+      summary: Справочник показателей
+      description: Доступ — вошедшие.
       operationId: listIndicators
       parameters:
-        - name: categoryId
+        - name: category
           in: query
           schema:
-            type: integer
-            format: int64
-        - name: q
+            $ref: '#/components/schemas/Category'
+        - name: evaluationType
           in: query
-          description: Поиск по названию
           schema:
-            type: string
+            $ref: '#/components/schemas/EvaluationType'
         - name: archived
           in: query
-          description: true — архив, false — действующие, без параметра — все
-          schema:
-            type: boolean
-        - name: required
-          in: query
-          description: true — только обязательные
           schema:
             type: boolean
       responses:
@@ -426,9 +592,9 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
-      tags: [Категории и показатели]
+      tags: [Показатели]
       summary: Создание показателя
-      description: Доступ — админ. Показатель сразу появляется у преподавателей в открытом периоде.
+      description: Доступ — админ.
       operationId: createIndicator
       security:
         - session: []
@@ -441,7 +607,7 @@ paths:
               $ref: '#/components/schemas/IndicatorRequest'
       responses:
         '201':
-          description: Показатель создан
+          description: Создан
           content:
             application/json:
               schema:
@@ -452,21 +618,20 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          description: Категория не найдена
+        '409':
+          description: Код показателя уже занят
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
   /api/indicators/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
     get:
-      tags: [Категории и показатели]
+      tags: [Показатели]
       summary: Карточка показателя
       description: Доступ — вошедшие.
       operationId: getIndicator
+      parameters:
+        - $ref: '#/components/parameters/Id'
       responses:
         '200':
           description: Показатель
@@ -479,15 +644,15 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
     put:
-      tags: [Категории и показатели]
-      summary: Изменение показателя
-      description: |
-        Доступ — админ. Новый коэффициент или максимальный балл пересчитывает баллы
-        открытых периодов. Баллы закрытых периодов не меняются.
+      tags: [Показатели]
+      summary: Новая редакция показателя
+      description: Доступ — админ.
       operationId: updateIndicator
       security:
         - session: []
           csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
       requestBody:
         required: true
         content:
@@ -496,7 +661,7 @@ paths:
               $ref: '#/components/schemas/IndicatorRequest'
       responses:
         '200':
-          description: Показатель изменён
+          description: Редакция создана
           content:
             application/json:
               schema:
@@ -510,26 +675,25 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Показатель в архиве
+          description: Редакции пересекаются по датам
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
   /api/indicators/{id}/archive:
-    parameters:
-      - $ref: '#/components/parameters/Id'
     post:
-      tags: [Категории и показатели]
-      summary: Перенос показателя в архив
-      description: Доступ — админ. Показатель не удаляется, старые записи и баллы сохраняются.
-      operationId: archiveIndicator
+      tags: [Показатели]
+      summary: Перенос в архив и возврат
+      description: Доступ — админ.
+      operationId: toggleIndicatorArchive
       security:
         - session: []
           csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Показатель в архиве
+          description: Готово
           content:
             application/json:
               schema:
@@ -540,19 +704,33 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-
+  /api/indicators/{id}/versions:
+    get:
+      tags: [Показатели]
+      summary: Редакции показателя
+      description: Доступ — вошедшие.
+      operationId: listIndicatorVersions
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Редакции
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndicatorVersionDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/periods:
     get:
       tags: [Отчётные периоды]
       summary: Список периодов
-      description: Доступ — вошедшие. Сначала новые.
+      description: Доступ — вошедшие.
       operationId: listPeriods
-      parameters:
-        - name: closed
-          in: query
-          description: true — закрытые, false — открытые, без параметра — все
-          schema:
-            type: boolean
       responses:
         '200':
           description: Периоды
@@ -567,10 +745,7 @@ paths:
     post:
       tags: [Отчётные периоды]
       summary: Создание периода
-      description: |
-        Доступ — админ. Периоды одного типа не должны пересекаться по датам.
-        Разных типов — могут: семестр и октябрь внутри него открыты одновременно,
-        записи журнала попадают в оба по дате.
+      description: Доступ — админ.
       operationId: createPeriod
       security:
         - session: []
@@ -583,7 +758,7 @@ paths:
               $ref: '#/components/schemas/PeriodRequest'
       responses:
         '201':
-          description: Период создан
+          description: Создан
           content:
             application/json:
               schema:
@@ -595,65 +770,47 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: Пересекается с другим периодом того же типа
+          description: Период этого типа пересекается с другим
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
-  /api/periods/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    put:
+  /api/periods/current:
+    get:
       tags: [Отчётные периоды]
-      summary: Изменение периода
-      description: Доступ — админ. Закрытый период изменить нельзя.
-      operationId: updatePeriod
-      security:
-        - session: []
-          csrf: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PeriodRequest'
+      summary: Текущий период
+      description: Доступ — вошедшие. Открытый период, в который попадает сегодняшняя дата; из нескольких — самый
+        длинный; если таких нет — открытый с самой поздней датой окончания.
+      operationId: getCurrentPeriod
       responses:
         '200':
-          description: Период изменён
+          description: Период
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PeriodDto'
-        '400':
-          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: Период закрыт или пересекается с другим периодом того же типа
+          description: Открытых периодов нет
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
   /api/periods/{id}/close:
-    parameters:
-      - $ref: '#/components/parameters/Id'
     post:
       tags: [Отчётные периоды]
       summary: Закрытие периода
-      description: Доступ — админ. После закрытия записи не меняются, баллы не пересчитываются.
+      description: Доступ — админ. Формирует снимок официальных итогов. Незавершённые результаты в него не входят.
       operationId: closePeriod
       security:
         - session: []
           csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Период закрыт
+          description: Закрыт
           content:
             application/json:
               schema:
@@ -670,20 +827,1026 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
-  /api/entries:
+  /api/periods/{id}/reopen:
+    post:
+      tags: [Отчётные периоды]
+      summary: Переоткрытие периода
+      description: Доступ — директор. Основание обязательно и записывается в журнал аудита.
+      operationId: reopenPeriod
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Открыт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Период не закрыт
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements:
     get:
-      tags: [Записи и файлы]
-      summary: Журнал своих записей
-      description: |
-        Доступ — преподаватель. Только записи текущего пользователя.
-        Записи не привязаны к периоду: у каждой есть дата `eventDate`. С `periodId` возвращаются
-        записи, дата которых входит в этот период; без него — весь журнал, новые сверху.
-      operationId: listEntries
+      tags: [Достижения]
+      summary: Реестр достижений
+      description: Доступ — вошедшие, по области доступа.
+      operationId: listAchievements
+      parameters:
+        - name: scope
+          in: query
+          description: '`my` — свои и где соавтор, `review` — очередь РОП, `approval` — очередь директора, `registry`
+            — всё доступное'
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ResultStatus'
+        - name: periodId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/Category'
+        - name: indicatorId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: userId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: q
+          in: query
+          description: Поиск по названию и участникам
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Достижения
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AchievementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Достижения]
+      summary: Создание черновика
+      description: Доступ — сотрудник; за другого — админ или полномочие ENTER_FOR_OTHERS. Редакция показателя определяется
+        по периоду. Совпал строгий ключ — 409 с номером существующей записи.
+      operationId: createAchievement
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AchievementRequest'
+      responses:
+        '201':
+          description: Создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/check-duplicates:
+    post:
+      tags: [Достижения]
+      summary: Поиск повторов до сохранения
+      description: Доступ — вошедшие.
+      operationId: checkDuplicates
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateQuery'
+      responses:
+        '200':
+          description: Возможные повторы
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DuplicateDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/achievements/{id}:
+    get:
+      tags: [Достижения]
+      summary: Карточка достижения
+      description: Доступ — вошедшие, по области доступа.
+      operationId: getAchievement
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Достижение
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Достижения]
+      summary: Изменение
+      description: Доступ — заявитель или кто ввёл за него. Только в статусах `DRAFT`, `RETURNED`, `REVISION`.
+      operationId: updateAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AchievementRequest'
+      responses:
+        '200':
+          description: Изменено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      tags: [Достижения]
+      summary: Удаление черновика
+      description: Доступ — заявитель или кто ввёл за него. Только `DRAFT`.
+      operationId: deleteAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '204':
+          description: Удалено
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/evidence:
+    post:
+      tags: [Достижения]
+      summary: Добавление подтверждения
+      description: Доступ — заявитель или кто ввёл за него. Файл или ссылка. Допустимые форматы и размер задаются
+        настройками, сейчас PDF, JPG и PNG до 10 МБ.
+      operationId: addEvidence
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, docType]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                docType:
+                  type: string
+                requisites:
+                  type: string
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceLinkRequest'
+      responses:
+        '201':
+          description: Добавлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/evidence/{evidenceId}/file:
+    get:
+      tags: [Достижения]
+      summary: Скачивание файла
+      description: Доступ — вошедшие, по области доступа.
+      operationId: downloadEvidence
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: evidenceId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Файл
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/achievements/{id}/evidence/{evidenceId}:
+    delete:
+      tags: [Достижения]
+      summary: Снятие подтверждения
+      description: Доступ — заявитель или кто ввёл за него. Только в статусах `DRAFT`, `RETURNED`, `REVISION`. Документ
+        архивируется.
+      operationId: removeEvidence
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: evidenceId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Снято
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/submit:
+    post:
+      tags: [Достижения]
+      summary: Отправка на проверку
+      description: Доступ — заявитель или кто ввёл за него. Проверяет обязательные поля, документы, дубли и доли.
+        Проверяет РОП программы; директор — если заявитель сам РОП или в области нет РОП, который не участвует в
+        достижении. Похожие записи ставят признак `possibleDuplicate`.
+      operationId: submitAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: На проверке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/review:
+    post:
+      tags: [Достижения]
+      summary: Проверка пройдена
+      description: Доступ — РОП своей области; директор, если `reviewer` = DIRECTOR. Из `ON_REVIEW` в `REVIEWED`.
+        Участник не может проверять. При `possibleDuplicate` комментарий обязателен.
+      operationId: reviewAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Проверено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/return:
+    post:
+      tags: [Достижения]
+      summary: Возврат на доработку
+      description: Доступ — РОП своей области, директор. Из `ON_REVIEW` и `REVIEWED`.
+      operationId: returnAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Возвращено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/reject:
+    post:
+      tags: [Достижения]
+      summary: Отклонение
+      description: Доступ — РОП своей области, директор. Из `ON_REVIEW` и `REVIEWED`. Если это был пересмотр, прежние
+        начисления отменяются.
+      operationId: rejectAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Отклонено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/approve:
+    post:
+      tags: [Достижения]
+      summary: Утверждение
+      description: 'Доступ — директор. Только из `REVIEWED`: проверка и утверждение — отдельные решения. Создаёт
+        начисления и пересчитывает итоги. Участник не может утверждать.'
+      operationId: approveAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Утверждено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/revision:
+    post:
+      tags: [Достижения]
+      summary: Отправка на пересмотр
+      description: Доступ — директор. Из `APPROVED`. Сохраняет прежнюю редакцию, начисления остаются в итоге до
+        утверждения новой.
+      operationId: sendToRevision
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: На пересмотре
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие, период закрыт или нарушен запрет дублей
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/achievements/{id}/join:
+    post:
+      tags: [Достижения]
+      summary: Присоединение соавтором
+      description: Доступ — сотрудник своей категории. Доли всех участников пересчитываются. Если запись уже проверена
+        или утверждена, новая редакция проходит проверку заново, прежняя сохраняется.
+      operationId: joinAchievement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Присоединился
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AchievementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Уже участник, показатель индивидуальный или запись отклонена
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements:
+    get:
+      tags: [Целевые показатели РОП]
+      summary: Значения
+      description: Доступ — админ, директор; РОП — своя область.
+      operationId: listMeasurements
       parameters:
         - name: periodId
           in: query
-          description: Записи с датой внутри периода. Без параметра — весь журнал
+          schema:
+            type: integer
+            format: int64
+        - name: programId
+          in: query
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Значения
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MeasurementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Внесение значения
+      description: Доступ — админ; РОП — своя область.
+      operationId: createMeasurement
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeasurementRequest'
+      responses:
+        '201':
+          description: Внесено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}:
+    put:
+      tags: [Целевые показатели РОП]
+      summary: Изменение значения
+      description: Доступ — админ; РОП — своя область. Только в статусах `DRAFT`, `RETURNED`, `REVISION`.
+      operationId: updateMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeasurementRequest'
+      responses:
+        '200':
+          description: Изменено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}/submit:
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Отправка директору
+      description: Доступ — админ; РОП — своя область.
+      operationId: submitMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: На проверке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}/review:
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Проверка данных
+      description: Доступ — директор. Из `ON_REVIEW` в `REVIEWED`.
+      operationId: reviewMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Проверено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}/approve:
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Утверждение
+      description: Доступ — директор. Только из `REVIEWED`.
+      operationId: approveMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Утверждено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}/return:
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Возврат
+      description: Доступ — директор.
+      operationId: returnMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Возвращено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}/reject:
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Отклонение
+      description: Доступ — директор.
+      operationId: rejectMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Отклонено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/measurements/{id}/revision:
+    post:
+      tags: [Целевые показатели РОП]
+      summary: Исправление утверждённого значения
+      description: Доступ — директор. Создаёт новую версию, прежняя сохраняется.
+      operationId: reviseMeasurement
+      security:
+        - session: []
+          csrf: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentRequest'
+      responses:
+        '200':
+          description: Новая версия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementDto'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Статус не позволяет это действие или значение за этот период уже внесено
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /api/scores/my:
+    get:
+      tags: [Баллы и дашборды]
+      summary: Мои баллы
+      description: Доступ — вошедшие.
+      operationId: getMyScores
+      parameters:
+        - name: periodId
+          in: query
+          description: Без параметра — текущий период
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Баллы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyScoresDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/scores/users/{id}:
+    get:
+      tags: [Баллы и дашборды]
+      summary: Баллы сотрудника
+      description: Доступ — сам сотрудник, админ, директор; РОП — своя область.
+      operationId: getUserScores
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: periodId
+          in: query
+          description: Без параметра — текущий период
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Баллы
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyScoresDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/dashboard/director:
+    get:
+      tags: [Баллы и дашборды]
+      summary: Сводный дашборд
+      description: Доступ — директор, админ; РОП — своя область.
+      operationId: getDirectorDashboard
+      parameters:
+        - name: periodId
+          in: query
+          description: Без параметра — текущий период
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Дашборд
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectorDashboardDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/reports/{type}.xlsx:
+    get:
+      tags: [Отчёты]
+      summary: Выгрузка отчёта
+      description: Доступ — вошедшие, по области доступа; `individual` — свой, остальные — директор, админ, РОП
+        своей области.
+      operationId: exportReport
+      parameters:
+        - name: type
+          in: path
+          description: '`individual`, `category`, `program`, `indicator`, `approval`'
+          required: true
+          schema:
+            type: string
+            enum: [individual, category, program, indicator, approval]
+        - name: periodId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: userId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/Category'
+        - name: programId
+          in: query
           schema:
             type: integer
             format: int64
@@ -692,140 +1855,80 @@ paths:
           schema:
             type: integer
             format: int64
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ResultStatus'
       responses:
         '200':
-          description: Записи
+          description: Файл XLSX
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/audit:
+    get:
+      tags: [Журнал и импорт]
+      summary: Журнал аудита
+      description: Доступ — админ, директор.
+      operationId: listAudit
+      parameters:
+        - name: objectType
+          in: query
+          description: ACHIEVEMENT, PERIOD, INDICATOR и т. п.
+          schema:
+            type: string
+        - name: objectId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Страница
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfAuditEvents'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/imports:
+    get:
+      tags: [Журнал и импорт]
+      summary: История загрузок
+      description: Доступ — админ; РОП с полномочием IMPORT.
+      operationId: listImports
+      responses:
+        '200':
+          description: Загрузки
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/EntryDto'
+                  $ref: '#/components/schemas/ImportJobDto'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
     post:
-      tags: [Записи и файлы]
-      summary: Создание записи
-      description: |
-        Доступ — преподаватель. Преподаватель берётся из сессии, не из тела запроса.
-        Запись попадает в отчёты всех периодов, в которые входит её дата.
-        Баллы этих периодов пересчитываются сразу, в той же транзакции.
-      operationId: createEntry
-      security:
-        - session: []
-          csrf: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EntryRequest'
-      responses:
-        '201':
-          description: Запись создана
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EntryDto'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: Показатель не найден
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-        '409':
-          $ref: '#/components/responses/EntryLocked'
-
-  /api/entries/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    get:
-      tags: [Записи и файлы]
-      summary: Одна запись
-      description: Доступ — преподаватель, только своя запись.
-      operationId: getEntry
-      responses:
-        '200':
-          description: Запись
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EntryDto'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags: [Записи и файлы]
-      summary: Изменение записи
-      description: |
-        Доступ — преподаватель, только своя запись. Если дату поменяли, баллы пересчитываются
-        и в периодах по старой дате, и в периодах по новой — сразу, в той же транзакции.
-      operationId: updateEntry
-      security:
-        - session: []
-          csrf: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EntryRequest'
-      responses:
-        '200':
-          description: Запись изменена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EntryDto'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/EntryLocked'
-    delete:
-      tags: [Записи и файлы]
-      summary: Удаление записи
-      description: Доступ — преподаватель, только своя запись. Файлы записи удаляются вместе с ней.
-      operationId: deleteEntry
-      security:
-        - session: []
-          csrf: []
-      responses:
-        '204':
-          description: Запись удалена
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/EntryLocked'
-
-  /api/entries/{id}/attachments:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    post:
-      tags: [Записи и файлы]
-      summary: Загрузка файла
-      description: Доступ — преподаватель, только к своей записи. PDF, JPG или PNG, не больше 10 МБ.
-      operationId: uploadAttachment
+      tags: [Журнал и импорт]
+      summary: Загрузка и проверка файла
+      description: Доступ — админ; РОП с полномочием IMPORT — своя область. Возвращает протокол, ничего не меняя.
+      operationId: validateImport
       security:
         - session: []
           csrf: []
@@ -835,159 +1938,44 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [file]
+              required: [type, file]
               properties:
+                type:
+                  $ref: '#/components/schemas/ImportType'
                 file:
                   type: string
                   format: binary
       responses:
         '201':
-          description: Файл загружен
+          description: Файл проверен
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttachmentDto'
+                $ref: '#/components/schemas/ImportJobDto'
         '400':
-          description: Неподходящий тип файла или файл больше 10 МБ
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/EntryLocked'
-
-  /api/attachments/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    get:
-      tags: [Записи и файлы]
-      summary: Скачивание файла
-      description: Доступ — владелец записи и админ. Файлы хранятся вне static и отдаются только здесь.
-      operationId: downloadAttachment
-      responses:
-        '200':
-          description: Содержимое файла
-          content:
-            application/pdf:
-              schema:
-                type: string
-                format: binary
-            image/jpeg:
-              schema:
-                type: string
-                format: binary
-            image/png:
-              schema:
-                type: string
-                format: binary
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      tags: [Записи и файлы]
-      summary: Удаление файла
-      description: Доступ — владелец записи.
-      operationId: deleteAttachment
-      security:
-        - session: []
-          csrf: []
-      responses:
-        '204':
-          description: Файл удалён
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/EntryLocked'
-
-  /api/cabinet:
-    get:
-      tags: [Кабинет и отчёты]
-      summary: Кабинет преподавателя
-      description: Доступ — преподаватель. Показатели, заполненность и сумма баллов за период.
-      operationId: getCabinet
-      parameters:
-        - name: periodId
-          in: query
-          description: |
-            Без параметра — открытый период, в который попадает сегодняшняя дата;
-            если таких несколько (семестр и месяц внутри него) — самый длинный;
-            если ни одного — открытый период с самой поздней датой окончания
-          schema:
-            type: integer
-            format: int64
-      responses:
-        '200':
-          description: Кабинет
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Cabinet'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          description: Нет ни одного открытого периода
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-
-  /api/reports/my:
-    get:
-      tags: [Кабинет и отчёты]
-      summary: Свой отчёт
-      description: Доступ — преподаватель.
-      operationId: getMyReport
-      parameters:
-        - $ref: '#/components/parameters/PeriodIdRequired'
-      responses:
-        '200':
-          description: Отчёт за период
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReportDto'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/reports/my/submit:
+  /api/imports/{id}/apply:
     post:
-      tags: [Кабинет и отчёты]
-      summary: Отправка отчёта
-      description: |
-        Доступ — преподаватель. После отправки записи за период менять нельзя,
-        пока администратор не вернёт отчёт.
-      operationId: submitMyReport
+      tags: [Журнал и импорт]
+      summary: Подтверждение загрузки
+      description: Доступ — админ; РОП с полномочием IMPORT — своя область. Загружает строки NEW и UPDATE.
+      operationId: applyImport
       security:
         - session: []
           csrf: []
       parameters:
-        - $ref: '#/components/parameters/PeriodIdRequired'
+        - $ref: '#/components/parameters/Id'
       responses:
         '200':
-          description: Отчёт отправлен
+          description: Загружено
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReportDto'
+                $ref: '#/components/schemas/ImportJobDto'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -995,265 +1983,27 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Не заполнены обязательные показатели, отчёт уже отправлен или период закрыт
+          description: Загрузка уже применена
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-
-  /api/reports/teachers/{teacherId}:
+  /api/imports/templates/{type}:
     get:
-      tags: [Кабинет и отчёты]
-      summary: Отчёт преподавателя
-      description: Доступ — админ.
-      operationId: getTeacherReport
+      tags: [Журнал и импорт]
+      summary: Шаблон XLSX
+      description: Доступ — админ; РОП с полномочием IMPORT.
+      operationId: downloadImportTemplate
       parameters:
-        - name: teacherId
+        - name: type
           in: path
           required: true
           schema:
-            type: integer
-            format: int64
-        - $ref: '#/components/parameters/PeriodIdRequired'
+            $ref: '#/components/schemas/ImportType'
       responses:
         '200':
-          description: Отчёт преподавателя за период
+          description: Шаблон
           content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReportDto'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/reports/summary:
-    get:
-      tags: [Кабинет и отчёты]
-      summary: Сводный отчёт и рейтинг
-      description: Доступ — админ. Рейтинг по сумме баллов за период.
-      operationId: getSummary
-      parameters:
-        - $ref: '#/components/parameters/PeriodIdRequired'
-        - name: department
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/ReportStatus'
-        - name: sort
-          in: query
-          description: |
-            `total` — по сумме баллов (по умолчанию, по убыванию), `name` — по ФИО,
-            `category:<id>` — по баллам категории
-          schema:
-            type: string
-            default: total
-            examples: [total, name, 'category:2']
-      responses:
-        '200':
-          description: Сводный отчёт
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SummaryDto'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/reports/control:
-    get:
-      tags: [Кабинет и отчёты]
-      summary: Контроль сдачи
-      description: Доступ — админ. Кто сдал отчёт, кто в работе, кто не начинал.
-      operationId: getControl
-      parameters:
-        - $ref: '#/components/parameters/PeriodIdRequired'
-        - name: status
-          in: query
-          description: Без параметра — все преподаватели
-          schema:
-            type: string
-            enum: [NOT_SUBMITTED, SUBMITTED, ACCEPTED]
-      responses:
-        '200':
-          description: Контроль сдачи
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ControlDto'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/auth/password:
-    post:
-      tags: [После защиты]
-      summary: Смена пароля
-      description: Доступ — вошедшие.
-      operationId: changePassword
-      security:
-        - session: []
-          csrf: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PasswordChangeRequest'
-      responses:
-        '204':
-          description: Пароль изменён
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /api/indicators/{id}/fields:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    put:
-      tags: [После защиты]
-      summary: Настройка полей показателя
-      description: Доступ — админ. Какие сведения заполняет преподаватель в записи по показателю.
-      operationId: updateIndicatorFields
-      security:
-        - session: []
-          csrf: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/IndicatorField'
-      responses:
-        '200':
-          description: Поля сохранены
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IndicatorDto'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /api/reports/{id}/accept:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    post:
-      tags: [После защиты]
-      summary: Приёмка отчёта
-      description: Доступ — админ. Принять можно только отправленный отчёт.
-      operationId: acceptReport
-      security:
-        - session: []
-          csrf: []
-      responses:
-        '200':
-          description: Отчёт принят
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReportDto'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: Отчёт не в статусе SUBMITTED
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-
-  /api/reports/{id}/return:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    post:
-      tags: [После защиты]
-      summary: Возврат отчёта с комментарием
-      description: Доступ — админ. Преподаватель снова может менять записи за период.
-      operationId: returnReport
-      security:
-        - session: []
-          csrf: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReturnRequest'
-      responses:
-        '200':
-          description: Отчёт возвращён
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReportDto'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          description: Отчёт не в статусе SUBMITTED
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-
-  /api/reports/summary/export:
-    get:
-      tags: [После защиты]
-      summary: Экспорт сводного отчёта в PDF или Excel
-      description: Доступ — админ. Фильтры те же, что у сводного отчёта.
-      operationId: exportSummary
-      parameters:
-        - $ref: '#/components/parameters/PeriodIdRequired'
-        - name: format
-          in: query
-          required: true
-          schema:
-            type: string
-            enum: [pdf, xlsx]
-        - name: department
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            $ref: '#/components/schemas/ReportStatus'
-      responses:
-        '200':
-          description: Файл отчёта
-          content:
-            application/pdf:
-              schema:
-                type: string
-                format: binary
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema:
                 type: string
@@ -1262,40 +2012,16 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-
-  /api/dashboard:
-    get:
-      tags: [После защиты]
-      summary: Данные дашборда
-      description: Доступ — админ. Состав данных согласуем позже.
-      operationId: getDashboard
-      parameters:
-        - $ref: '#/components/parameters/PeriodIdRequired'
-      responses:
-        '200':
-          description: Данные дашборда
-          content:
-            application/json:
-              schema:
-                type: object
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
 components:
   securitySchemes:
     session:
       type: apiKey
       in: cookie
       name: JSESSIONID
-      description: Сессия после входа. Браузер передаёт cookie сам.
     csrf:
       type: apiKey
       in: header
       name: X-XSRF-TOKEN
-      description: Значение cookie XSRF-TOKEN, её выдаёт GET /api/auth/csrf.
-
   parameters:
     Id:
       name: id
@@ -1304,17 +2030,10 @@ components:
       schema:
         type: integer
         format: int64
-    PeriodIdRequired:
-      name: periodId
-      in: query
-      required: true
-      schema:
-        type: integer
-        format: int64
     Page:
       name: page
       in: query
-      description: Номер страницы, с нуля
+      description: Номер страницы с нуля
       schema:
         type: integer
         minimum: 0
@@ -1322,186 +2041,316 @@ components:
     Size:
       name: size
       in: query
+      description: Размер страницы
       schema:
         type: integer
         minimum: 1
         maximum: 100
         default: 20
-
   responses:
     BadRequest:
-      description: Ошибка в данных, подробности по полям в `errors`
+      description: Ошибка в полях запроса
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
-          example:
-            title: Ошибка в данных
-            status: 400
-            detail: Проверьте заполнение полей
-            errors:
-              name: Укажите название
     Unauthorized:
-      description: Нужно войти в систему
+      description: Нужен вход
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
-          example:
-            title: Нужно войти в систему
-            status: 401
     Forbidden:
-      description: Недостаточно прав, чужие данные или нет CSRF-токена
+      description: Нет прав или нет CSRF-токена
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
-          example:
-            title: Недостаточно прав
-            status: 403
     NotFound:
       description: Не найдено
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
-          example:
-            title: Не найдено
-            status: 404
-            detail: Запись 15 не найдена
-    EntryLocked:
-      description: |
-        Дата записи (новая или прежняя) попадает в закрытый период или в период,
-        отчёт за который отправлен или принят. Менять такую запись нельзя
+    Conflict:
+      description: Действие противоречит состоянию данных
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
-          example:
-            title: Действие невозможно
-            status: 409
-            detail: Отчёт за 1 семестр 2026/27 отправлен, записи с датой в этом периоде менять нельзя
-
   schemas:
     ProblemDetail:
       type: object
-      description: Ошибка в формате RFC 9457
+      description: Ошибка в формате RFC 9457.
       properties:
         type:
           type: string
-          example: about:blank
         title:
           type: string
         status:
           type: integer
+          format: int32
         detail:
           type: [string, 'null']
         instance:
           type: string
-          example: /api/periods
         errors:
           type: object
-          description: Ошибки по полям формы, только для 400
+          description: 'Только для 400: имя поля → текст'
           additionalProperties:
             type: string
-
+    PageMeta:
+      type: object
+      description: Сведения о странице.
+      required: [size, number, totalElements, totalPages]
+      properties:
+        size:
+          type: integer
+          format: int32
+        number:
+          type: integer
+          format: int32
+          description: Номер страницы с нуля
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int32
     Role:
       type: string
-      enum: [TEACHER, ADMIN]
-
-    LoginRequest:
+      description: Функциональная роль. У человека их может быть несколько.
+      enum: [EMPLOYEE, REVIEWER, DIRECTOR, ADMIN]
+    Category:
+      type: string
+      description: Категория оценки. У сотрудника их может быть несколько.
+      enum: [PPS, AUP, ROP]
+    Permission:
+      type: string
+      description: 'Полномочие сверх роли: загрузка XLSX, ввод за другого, самостоятельный ввод сотрудником АУП.'
+      enum: [IMPORT, ENTER_FOR_OTHERS, AUP_SELF_ENTRY]
+    DepartmentDto:
       type: object
-      required: [login, password]
-      properties:
-        login:
-          type: string
-          example: a.ivanova
-        password:
-          type: string
-          format: password
-
-    UserDto:
-      type: object
-      required: [id, login, fullName, lastName, firstName, role, active]
+      description: Подразделение.
+      required: [id, name]
       properties:
         id:
           type: integer
           format: int64
-          example: 2
-        login:
+        name:
           type: string
-          example: a.ivanova
-        fullName:
-          type: string
-          description: Фамилия, имя и отчество через пробел
-          example: Иванова Анна Петровна
-        lastName:
-          type: string
-          example: Иванова
-        firstName:
-          type: string
-          example: Анна
-        middleName:
-          type: [string, 'null']
-          example: Петровна
-        role:
-          $ref: '#/components/schemas/Role'
-        department:
-          type: [string, 'null']
-          description: Кафедра строкой, без отдельного справочника
-          example: Информационных технологий
-        position:
-          type: [string, 'null']
-          example: Доцент
-        active:
-          type: boolean
-          description: false — пользователь заблокирован
-
-    UserRequest:
+    DepartmentRequest:
       type: object
-      description: |
-        Маппер переносит поля по одному. `role` и `password` маппер не копирует:
-        роль задаёт сервис после проверки прав, пароль сервис сохраняет как хеш BCrypt.
-        Кафедра обязательна только для роли `TEACHER`: без неё ответ 400 с `errors.department`.
-      required: [lastName, firstName, login, role]
+      description: Создание и изменение подразделения.
+      required: [name]
       properties:
-        lastName:
+        name:
           type: string
-          maxLength: 100
-        firstName:
+          maxLength: 150
+    ProgramDto:
+      type: object
+      description: Образовательная программа.
+      required: [id, code, name, topIt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        code:
           type: string
-          maxLength: 100
-        middleName:
-          type: [string, 'null']
-          maxLength: 100
+        name:
+          type: string
+        topIt:
+          type: boolean
+          description: 'Программа «топ-ИТ»: только её дисциплины учитываются в показателях, где нужна программа'
+    ProgramRequest:
+      type: object
+      description: Создание и изменение образовательной программы.
+      required: [code, name, topIt]
+      properties:
+        code:
+          type: string
+          maxLength: 30
+        name:
+          type: string
+          maxLength: 255
+        topIt:
+          type: boolean
+    LoginRequest:
+      type: object
+      description: Вход.
+      required: [login, password]
+      properties:
         login:
           type: string
-          pattern: '^[a-z0-9.-]{3,50}$'
-          description: Латинские буквы, цифры, точка, дефис
-        position:
-          type: [string, 'null']
-          maxLength: 100
-        role:
-          $ref: '#/components/schemas/Role'
-        department:
-          type: [string, 'null']
-          maxLength: 150
-          description: Кафедра. Обязательна для преподавателя, у администратора может быть пустой
         password:
-          type: [string, 'null']
-          format: password
-          minLength: 8
-          description: Временный пароль. Обязателен при создании, при изменении игнорируется.
-
-    UserActiveRequest:
+          type: string
+    ChangePasswordRequest:
       type: object
+      description: Смена своего пароля.
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+    ResetPasswordRequest:
+      type: object
+      description: Выдача нового временного пароля администратором.
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 8
+    ActiveRequest:
+      type: object
+      description: Активация и деактивация.
       required: [active]
       properties:
         active:
           type: boolean
-
-    UserPage:
+    CommentRequest:
       type: object
+      description: Решение, где причина обязательна.
+      required: [comment]
+      properties:
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    DecisionRequest:
+      type: object
+      description: Решение, где комментарий необязателен.
+      properties:
+        comment:
+          type: [string, 'null']
+          maxLength: 1000
+    UserDto:
+      type: object
+      description: Сотрудник и его учётная запись.
+      required: [id, login, fullName, lastName, firstName, middleName, externalId, roles, categories, permissions,
+        departmentId, departmentName, managerId, position, programIds, reviewProgramIds, active, mustChangePassword]
+      properties:
+        id:
+          type: integer
+          format: int64
+        login:
+          type: string
+        fullName:
+          type: string
+          description: Фамилия, имя и отчество через пробел
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: [string, 'null']
+        externalId:
+          type: [string, 'null']
+          description: Устойчивый ключ для повторного импорта
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        departmentId:
+          type: [integer, 'null']
+          format: int64
+        departmentName:
+          type: [string, 'null']
+        managerId:
+          type: [integer, 'null']
+          format: int64
+        position:
+          type: [string, 'null']
+        programIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Программы, к которым привязан сотрудник
+        reviewProgramIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Программы, результаты которых он проверяет как РОП
+        active:
+          type: boolean
+          description: false — учётная запись деактивирована
+        mustChangePassword:
+          type: boolean
+          description: Пароль временный, клиент предлагает сменить его
+    UserRequest:
+      type: object
+      description: Создание и изменение сотрудника.
+      required: [lastName, firstName, middleName, login, roles, categories, departmentId, position, programIds,
+        password]
+      properties:
+        lastName:
+          type: string
+          maxLength: 100
+        firstName:
+          type: string
+          maxLength: 100
+        middleName:
+          type: [string, 'null']
+          maxLength: 100
+        login:
+          type: string
+          description: a-z, 0-9, точка и дефис, 3–50 символов
+          pattern: ^[a-z0-9.-]{3,50}$
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+          description: Хотя бы одна роль
+          minItems: 1
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+        departmentId:
+          type: [integer, 'null']
+          format: int64
+        position:
+          type: [string, 'null']
+          maxLength: 100
+        programIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        reviewProgramIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Обязательны, если среди ролей есть REVIEWER
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        managerId:
+          type: [integer, 'null']
+          format: int64
+        externalId:
+          type: [string, 'null']
+          maxLength: 50
+        password:
+          type: [string, 'null']
+          description: 'Временный пароль: обязателен при создании, при изменении игнорируется'
+    PageOfUsers:
+      type: object
+      description: Страница сотрудников.
+      required: [content, page]
       properties:
         content:
           type: array
@@ -1509,160 +2358,320 @@ components:
             $ref: '#/components/schemas/UserDto'
         page:
           $ref: '#/components/schemas/PageMeta'
-
-    PageMeta:
+    PersonShort:
       type: object
-      properties:
-        size:
-          type: integer
-          example: 20
-        number:
-          type: integer
-          description: Номер страницы, с нуля
-          example: 0
-        totalElements:
-          type: integer
-          format: int64
-          example: 12
-        totalPages:
-          type: integer
-          example: 1
-
-    CategoryDto:
-      type: object
-      required: [id, name]
+      description: Краткие сведения о человеке в списках и карточках.
+      required: [id, fullName, departmentName]
       properties:
         id:
           type: integer
           format: int64
-          example: 1
-        name:
+        fullName:
           type: string
-          example: Учебная работа
-
-    CategoryRequest:
+        departmentName:
+          type: [string, 'null']
+    EmploymentRecordDto:
       type: object
-      required: [name]
+      description: Запись истории переводов.
+      required: [departmentName, position, validFrom, validTo]
       properties:
-        name:
+        departmentName:
+          type: [string, 'null']
+        position:
+          type: [string, 'null']
+        validFrom:
           type: string
-          maxLength: 150
-
+          format: date
+        validTo:
+          type: [string, 'null']
+          format: date
+          description: null — текущее место работы
+    EvaluationType:
+      type: string
+      description: 'Тип оценки: баллы (ППС, АУП) или целевое значение (РОП).'
+      enum: [POINTS, TARGET]
+    AccrualMethod:
+      type: string
+      description: 'Порядок начисления: автору целиком или на всех авторов.'
+      enum: [INDIVIDUAL, SHARED]
+    TargetDirection:
+      type: string
+      description: Направление сравнения с целевым значением.
+      enum: [AT_LEAST, AT_MOST]
+    AchievementType:
+      type: string
+      description: 'Вид достижения: входит в строгий ключ дублей.'
+      enum: [PUBLICATION, UMK_DOCUMENT, EVENT, CONTRACT, CONFERENCE, OTHER]
     IndicatorDto:
       type: object
-      required: [id, categoryId, categoryName, name, unit, coefficient, maxScore, required, archived, fields]
+      description: Показатель с действующей редакцией.
+      required: [id, code, name, category, evaluationType, unit, basePoints, accrualMethod, achievementType, targetValue,
+        percent, direction, coefficient, maxPoints, maxRepeats, requiresProgram, evidence, methodology, required,
+        evidenceRequired, version, validFrom, validTo, archived]
       properties:
         id:
           type: integer
           format: int64
-          example: 8
-        categoryId:
-          type: integer
-          format: int64
-          example: 3
-        categoryName:
+        code:
           type: string
-          example: Методическая работа
+          description: ППС-01, АУП-04, РОП-11
         name:
           type: string
-          example: Повышение квалификации
+          description: Полное наименование
+          maxLength: 500
+        category:
+          $ref: '#/components/schemas/Category'
+        evaluationType:
+          $ref: '#/components/schemas/EvaluationType'
         unit:
           type: string
-          example: ч
+          maxLength: 30
+        basePoints:
+          type: [number, 'null']
+          description: Базовый балл B; null у целевых показателей
+        accrualMethod:
+          oneOf:
+            - $ref: '#/components/schemas/AccrualMethod'
+            - type: 'null'
+          description: null у целевых показателей
+        achievementType:
+          oneOf:
+            - $ref: '#/components/schemas/AchievementType'
+            - type: 'null'
+          description: Обязателен у балльных показателей, null у целевых
+        targetValue:
+          type: [number, 'null']
+          description: Целевое значение T; null у балльных показателей
+        percent:
+          type: boolean
+          description: 'Факт считается как процент: 100 × числитель / знаменатель'
+        direction:
+          oneOf:
+            - $ref: '#/components/schemas/TargetDirection'
+            - type: 'null'
+          description: null у балльных показателей
         coefficient:
           type: number
-          example: 0.1
-        maxScore:
-          type: number
-          example: 10
+          description: Коэффициент c, по умолчанию 1
+        maxPoints:
+          type: [number, 'null']
+          description: Максимальный балл за период; null — без ограничения
+        maxRepeats:
+          type: [integer, 'null']
+          format: int32
+          description: Сколько раз за период можно начислить; null — без ограничения
+        requiresProgram:
+          type: boolean
+          description: Нужна образовательная программа топ-ИТ и дисциплина её учебного плана
+        evidence:
+          type: string
+          description: Перечень подтверждающих документов
+          maxLength: 1000
+        methodology:
+          type: [string, 'null']
+          description: Методика, определения числителя и знаменателя
         required:
           type: boolean
-          description: Без обязательного показателя отчёт не отправить
+          description: Обязательность показателя
+        evidenceRequired:
+          type: boolean
+          description: Без подтверждения результат не отправить на проверку
+        version:
+          type: integer
+          format: int32
+          description: Номер действующей редакции
+        validFrom:
+          type: string
+          format: date
+          description: Редакция действует с этой даты
+        validTo:
+          type: [string, 'null']
+          format: date
+          description: и по эту; null — без окончания
         archived:
           type: boolean
-        description:
-          type: [string, 'null']
-          description: Пояснение для преподавателей
-        fields:
-          type: array
-          description: Поля формы ввода. До настройки полей (после защиты) — пустой список.
-          items:
-            $ref: '#/components/schemas/IndicatorField'
-
     IndicatorRequest:
       type: object
-      required: [categoryId, name, unit, coefficient, maxScore, required]
+      description: Создание показателя или новая редакция существующего.
+      required: [code, name, category, evaluationType, unit, basePoints, accrualMethod, achievementType, targetValue,
+        percent, direction, coefficient, maxPoints, maxRepeats, requiresProgram, evidence]
       properties:
-        categoryId:
-          type: integer
-          format: int64
-        name:
-          type: string
-          maxLength: 255
-        unit:
+        code:
           type: string
           maxLength: 20
+        name:
+          type: string
+          description: Полное наименование
+          maxLength: 500
+        category:
+          $ref: '#/components/schemas/Category'
+        evaluationType:
+          $ref: '#/components/schemas/EvaluationType'
+        unit:
+          type: string
+          maxLength: 30
+        basePoints:
+          type: [number, 'null']
+          description: Базовый балл B; null у целевых показателей
+        accrualMethod:
+          oneOf:
+            - $ref: '#/components/schemas/AccrualMethod'
+            - type: 'null'
+          description: null у целевых показателей
+        achievementType:
+          oneOf:
+            - $ref: '#/components/schemas/AchievementType'
+            - type: 'null'
+          description: Обязателен у балльных показателей, null у целевых
+        targetValue:
+          type: [number, 'null']
+          description: Целевое значение T; null у балльных показателей
+        percent:
+          type: boolean
+          description: 'Факт считается как процент: 100 × числитель / знаменатель'
+        direction:
+          oneOf:
+            - $ref: '#/components/schemas/TargetDirection'
+            - type: 'null'
+          description: null у балльных показателей
         coefficient:
           type: number
-          exclusiveMinimum: 0
-        maxScore:
-          type: number
-          exclusiveMinimum: 0
-        required:
+          description: Коэффициент c, по умолчанию 1
+        maxPoints:
+          type: [number, 'null']
+          description: Максимальный балл за период; null — без ограничения
+        maxRepeats:
+          type: [integer, 'null']
+          format: int32
+          description: Сколько раз за период можно начислить; null — без ограничения
+        requiresProgram:
           type: boolean
-        description:
-          type: [string, 'null']
+          description: Нужна образовательная программа топ-ИТ и дисциплина её учебного плана
+        evidence:
+          type: string
+          description: Перечень подтверждающих документов
           maxLength: 1000
-
-    IndicatorField:
-      type: object
-      required: [key, label, type, required]
-      properties:
-        key:
-          type: string
-          description: Имя поля в EntryDto.fields
-          example: organization
-        label:
-          type: string
-          example: Организация
-        type:
-          type: string
-          enum: [TEXT, NUMBER, DATE, URL]
+        methodology:
+          type: [string, 'null']
+          maxLength: 2000
         required:
           type: boolean
-
+          description: По умолчанию false
+        evidenceRequired:
+          type: boolean
+          description: По умолчанию true
+        validFrom:
+          type: string
+          format: date
+          description: С какой даты действует новая редакция, по умолчанию сегодня
+    IndicatorVersionDto:
+      type: object
+      description: Редакция показателя.
+      required: [version, name, category, evaluationType, unit, basePoints, accrualMethod, achievementType, targetValue,
+        percent, direction, coefficient, maxPoints, maxRepeats, requiresProgram, evidence, methodology, required,
+        evidenceRequired, validFrom, validTo, createdAt]
+      properties:
+        version:
+          type: integer
+          format: int32
+        name:
+          type: string
+          description: Полное наименование
+          maxLength: 500
+        category:
+          $ref: '#/components/schemas/Category'
+        evaluationType:
+          $ref: '#/components/schemas/EvaluationType'
+        unit:
+          type: string
+          maxLength: 30
+        basePoints:
+          type: [number, 'null']
+          description: Базовый балл B; null у целевых показателей
+        accrualMethod:
+          oneOf:
+            - $ref: '#/components/schemas/AccrualMethod'
+            - type: 'null'
+          description: null у целевых показателей
+        achievementType:
+          oneOf:
+            - $ref: '#/components/schemas/AchievementType'
+            - type: 'null'
+          description: Обязателен у балльных показателей, null у целевых
+        targetValue:
+          type: [number, 'null']
+          description: Целевое значение T; null у балльных показателей
+        percent:
+          type: boolean
+          description: 'Факт считается как процент: 100 × числитель / знаменатель'
+        direction:
+          oneOf:
+            - $ref: '#/components/schemas/TargetDirection'
+            - type: 'null'
+          description: null у балльных показателей
+        coefficient:
+          type: number
+          description: Коэффициент c, по умолчанию 1
+        maxPoints:
+          type: [number, 'null']
+          description: Максимальный балл за период; null — без ограничения
+        maxRepeats:
+          type: [integer, 'null']
+          format: int32
+          description: Сколько раз за период можно начислить; null — без ограничения
+        requiresProgram:
+          type: boolean
+          description: Нужна образовательная программа топ-ИТ и дисциплина её учебного плана
+        evidence:
+          type: string
+          description: Перечень подтверждающих документов
+          maxLength: 1000
+        methodology:
+          type: [string, 'null']
+        required:
+          type: boolean
+        evidenceRequired:
+          type: boolean
+        validFrom:
+          type: string
+          format: date
+        validTo:
+          type: [string, 'null']
+          format: date
+        createdAt:
+          type: string
+          format: date-time
     PeriodType:
       type: string
-      enum: [MONTH, QUARTER, SEMESTER, YEAR]
-
+      description: Тип отчётного периода. CUSTOM — произвольный.
+      enum: [MONTH, QUARTER, SEMESTER, HALF_YEAR, YEAR, ACADEMIC_YEAR, CUSTOM]
     PeriodDto:
       type: object
-      required: [id, name, type, startDate, endDate, closed]
+      description: Отчётный период.
+      required: [id, name, type, startDate, endDate, closed, closedAt]
       properties:
         id:
           type: integer
           format: int64
-          example: 1
         name:
           type: string
-          example: 1 семестр 2026/27
         type:
           $ref: '#/components/schemas/PeriodType'
         startDate:
           type: string
           format: date
-          example: '2026-09-01'
         endDate:
           type: string
           format: date
-          example: '2027-01-31'
         closed:
           type: boolean
-
+        closedAt:
+          type: [string, 'null']
+          format: date-time
     PeriodRequest:
       type: object
+      description: Создание периода.
       required: [name, type, startDate, endDate]
-      description: Дата окончания не раньше даты начала.
       properties:
         name:
           type: string
@@ -1675,318 +2684,684 @@ components:
         endDate:
           type: string
           format: date
-
-    EntryDto:
+    ResultStatus:
+      type: string
+      description: Статус на маршруте согласования.
+      enum: [DRAFT, ON_REVIEW, RETURNED, REVIEWED, APPROVED, REJECTED, REVISION]
+    IdentifierType:
+      type: string
+      description: Вид идентификатора. Строгий ключ дублей — только DOI и номер документа.
+      enum: [DOI, URL, DOC_NUMBER]
+    DecisionAction:
+      type: string
+      description: Решение на маршруте.
+      enum: [CREATED, SUBMITTED, RETURNED, REVIEWED, APPROVED, REJECTED, JOINED, REVISION]
+    ReviewerKind:
+      type: string
+      description: 'Кто проверяет: РОП программы или директор.'
+      enum: [ROP, DIRECTOR]
+    ParticipantDto:
       type: object
-      description: |
-        Запись журнала. К периоду не привязана: в отчёт попадает по дате.
-        Баллов здесь нет, их считает scoring и показывает кабинет.
-      required: [id, indicatorId, eventDate, value, fields, attachments, createdAt, updatedAt]
+      description: 'Участник достижения: сотрудник или внешний соавтор.'
+      required: [userId, fullName, external, weight, share, points]
+      properties:
+        userId:
+          type: [integer, 'null']
+          format: int64
+          description: null — внешний соавтор
+        fullName:
+          type: string
+        external:
+          type: boolean
+        weight:
+          type: number
+          description: Вес участия w, по умолчанию 1
+        share:
+          type: number
+          description: Доля α = w / Σw, 4 знака
+        points:
+          type: number
+          description: Балл участника, 2 знака, распределён методом наибольших остатков
+    ParticipantRequest:
+      type: object
+      description: Соавтор в запросе. Заявителя сервер добавляет сам.
+      required: [userId, fullName, weight]
+      properties:
+        userId:
+          type: [integer, 'null']
+          format: int64
+          description: null — внешний соавтор
+        fullName:
+          type: [string, 'null']
+          description: ФИО внешнего соавтора
+          maxLength: 300
+        weight:
+          type: number
+          exclusiveMinimum: 0
+        basis:
+          type: [string, 'null']
+          description: Обоснование доли
+          maxLength: 1000
+    EvidenceDto:
+      type: object
+      description: 'Подтверждающий документ: заполнен файл или ссылка.'
+      required: [id, docType, requisites, fileName, size, url, version, uploadedAt, uploadedBy]
       properties:
         id:
           type: integer
           format: int64
-          example: 15
+        docType:
+          type: string
+          description: Копия статьи, сертификат участника и т. п.
+        requisites:
+          type: [string, 'null']
+        fileName:
+          type: [string, 'null']
+        size:
+          type: [integer, 'null']
+          format: int64
+        url:
+          type: [string, 'null']
+        version:
+          type: integer
+          format: int32
+          description: Версия документа
+        uploadedAt:
+          type: string
+          format: date-time
+        uploadedBy:
+          type: string
+    EvidenceLinkRequest:
+      type: object
+      description: Подтверждение-ссылка.
+      required: [docType, url]
+      properties:
+        docType:
+          type: string
+          maxLength: 100
+        url:
+          type: string
+          description: Начинается с http:// или https://
+          maxLength: 1000
+        requisites:
+          type: [string, 'null']
+          maxLength: 500
+    DecisionDto:
+      type: object
+      description: Запись истории решений.
+      required: [id, action, actor, comment, at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        action:
+          $ref: '#/components/schemas/DecisionAction'
+        actor:
+          type: string
+        comment:
+          type: [string, 'null']
+        at:
+          type: string
+          format: date-time
+    AchievementDto:
+      type: object
+      description: Достижение в едином реестре.
+      required: [id, indicatorId, indicatorCode, indicatorName, category, achievementType, periodId, periodName,
+        title, eventDate, identifierType, identifier, programId, programName, discipline, description, quantity,
+        owner, enteredBy, basis, participants, basePoints, coefficient, status, reviewer, possibleDuplicate, lastComment,
+        evidence, history, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
         indicatorId:
           type: integer
           format: int64
-          example: 8
+        indicatorCode:
+          type: string
+        indicatorName:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        achievementType:
+          $ref: '#/components/schemas/AchievementType'
+        periodId:
+          type: integer
+          format: int64
+        periodName:
+          type: string
+        title:
+          type: string
         eventDate:
           type: string
           format: date
-          description: Когда это произошло — дата публикации, окончания курса, выступления
-          example: '2026-10-13'
-        value:
-          type: number
-          description: Количество в единицах показателя
-          example: 72
-        fields:
-          type: object
-          description: Значения полей формы показателя, ключ — IndicatorField.key
-          additionalProperties: true
-          example:
-            program: Цифровые технологии в образовании
-            organization: Финансовый университет
-        comment:
+        identifierType:
+          oneOf:
+            - $ref: '#/components/schemas/IdentifierType'
+            - type: 'null'
+        identifier:
           type: [string, 'null']
-        attachments:
+        programId:
+          type: [integer, 'null']
+          format: int64
+        programName:
+          type: [string, 'null']
+        discipline:
+          type: [string, 'null']
+        description:
+          type: [string, 'null']
+        quantity:
+          type: [number, 'null']
+        owner:
+          $ref: '#/components/schemas/PersonShort'
+          description: Заявитель
+        enteredBy:
+          type: [string, 'null']
+          description: Кто ввёл за сотрудника
+        basis:
+          type: [string, 'null']
+          description: На каком основании
+        participants:
           type: array
           items:
-            $ref: '#/components/schemas/AttachmentDto'
+            $ref: '#/components/schemas/ParticipantDto'
+        basePoints:
+          type: number
+          description: B по редакции достижения
+        coefficient:
+          type: number
+        status:
+          $ref: '#/components/schemas/ResultStatus'
+        reviewer:
+          $ref: '#/components/schemas/ReviewerKind'
+        possibleDuplicate:
+          type: boolean
+          description: 'При отправке нашлись похожие записи: решение проверяющего — с обоснованием'
+        lastComment:
+          type: [string, 'null']
+          description: Последнее замечание или причина
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvidenceDto'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/DecisionDto'
+        version:
+          type: integer
+          format: int32
+          description: Редакция данных и расчёта, растёт при пересмотре и присоединении соавтора
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
-    EntryRequest:
+    AchievementRequest:
       type: object
-      description: |
-        Преподаватель берётся из сессии. `id` и баллы из запроса не принимаются.
-        Периода в запросе нет: запись попадает в отчёты всех периодов, куда входит `eventDate`.
-      required: [indicatorId, eventDate, value]
+      description: Создание и изменение достижения.
+      required: [indicatorId, periodId, title, eventDate, identifierType, identifier, programId, discipline, description,
+        coauthors, ownerId, basis]
       properties:
         indicatorId:
           type: integer
           format: int64
+        periodId:
+          type: integer
+          format: int64
+        title:
+          type: string
+          maxLength: 500
         eventDate:
           type: string
           format: date
-          description: Когда это произошло. Не может попадать в закрытый период или в период с отправленным отчётом
-        value:
-          type: number
-          exclusiveMinimum: 0
-        fields:
-          type: object
-          additionalProperties: true
-        comment:
+        identifierType:
+          oneOf:
+            - $ref: '#/components/schemas/IdentifierType'
+            - type: 'null'
+        identifier:
           type: [string, 'null']
+          maxLength: 500
+        programId:
+          type: [integer, 'null']
+          format: int64
+        discipline:
+          type: [string, 'null']
+          maxLength: 255
+        description:
+          type: [string, 'null']
+          maxLength: 2000
+        quantity:
+          type: [number, 'null']
+          exclusiveMinimum: 0
+        coauthors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParticipantRequest'
+          description: Только соавторы; у показателя INDIVIDUAL список пустой
+        ownerId:
+          type: [integer, 'null']
+          format: int64
+          description: 'Ввод за другого: за кого'
+        basis:
+          type: [string, 'null']
+          description: 'Ввод за другого: основание, тогда обязательно'
           maxLength: 1000
-
-    AttachmentDto:
+    DuplicateQuery:
       type: object
-      required: [id, fileName, contentType, size, uploadedAt]
-      properties:
-        id:
-          type: integer
-          format: int64
-        fileName:
-          type: string
-          example: udostoverenie.pdf
-        contentType:
-          type: string
-          enum: [application/pdf, image/jpeg, image/png]
-        size:
-          type: integer
-          format: int64
-          description: Размер в байтах
-        uploadedAt:
-          type: string
-          format: date-time
-
-    ReportStatus:
-      type: string
-      description: |
-        DRAFT — черновик, SUBMITTED — отправлен, ACCEPTED — принят,
-        RETURNED — возвращён на доработку
-      enum: [DRAFT, SUBMITTED, ACCEPTED, RETURNED]
-
-    CabinetRow:
-      type: object
-      description: Один показатель и то, что по нему внесено за период
-      required: [indicatorId, indicatorName, categoryName, unit, coefficient, maxScore, required, value, score]
+      description: Поиск повторов до сохранения.
+      required: [indicatorId, identifier, title, eventDate, excludeId]
       properties:
         indicatorId:
           type: integer
           format: int64
-        indicatorName:
+        identifier:
+          type: [string, 'null']
+        title:
           type: string
-        categoryName:
+        eventDate:
+          type: string
+          format: date
+        excludeId:
+          type: [integer, 'null']
+          format: int64
+          description: Не учитывать эту запись
+    DuplicateDto:
+      type: object
+      description: Найденный возможный повтор.
+      required: [achievementId, title, indicatorCode, eventDate, participants, status, match]
+      properties:
+        achievementId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        indicatorCode:
+          type: string
+        eventDate:
+          type: string
+          format: date
+        participants:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/ResultStatus'
+        match:
+          type: string
+          description: STRICT — совпал строгий ключ, SIMILAR — похожие запись и дата
+          enum: [STRICT, SIMILAR]
+    MeasurementDto:
+      type: object
+      description: Значение целевого показателя РОП за период по программе.
+      required: [id, indicatorId, indicatorCode, indicatorName, unit, periodId, programId, programName, target,
+        direction, percent, numerator, denominator, value, achievementPercent, deviation, achieved, scale, source,
+        documentBasis, status, lastComment, version, enteredBy, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        indicatorId:
+          type: integer
+          format: int64
+        indicatorCode:
+          type: string
+        indicatorName:
           type: string
         unit:
           type: string
-        coefficient:
+        periodId:
+          type: integer
+          format: int64
+        programId:
+          type: integer
+          format: int64
+        programName:
+          type: string
+        target:
           type: number
-        maxScore:
-          type: number
-        required:
+        direction:
+          $ref: '#/components/schemas/TargetDirection'
+        percent:
           type: boolean
+        numerator:
+          type: [number, 'null']
+          description: Числитель A
+        denominator:
+          type: [number, 'null']
+          description: Знаменатель D
         value:
           type: [number, 'null']
-          description: Сумма значений записей, null — записей нет
-        score:
-          type: number
-          description: Балл по показателю, уже не больше maxScore
-
-    Cabinet:
-      type: object
-      required: [period, reportStatus, totalScore, maxTotal, filledCount, indicatorCount, requiredFilled, requiredCount, rows]
-      properties:
-        period:
-          $ref: '#/components/schemas/PeriodDto'
-        reportStatus:
-          $ref: '#/components/schemas/ReportStatus'
-        totalScore:
-          type: number
-        maxTotal:
-          type: number
-        filledCount:
-          type: integer
-        indicatorCount:
-          type: integer
-        requiredFilled:
-          type: integer
-        requiredCount:
-          type: integer
-        rows:
-          type: array
-          items:
-            $ref: '#/components/schemas/CabinetRow'
-
-    TeacherShort:
-      type: object
-      required: [id, fullName]
-      properties:
-        id:
-          type: integer
-          format: int64
-        fullName:
-          type: string
-        department:
+          description: Факт F; null — недостаточно данных (D = 0)
+        achievementPercent:
+          type: [number, 'null']
+          description: P = 100 × F / T
+        deviation:
+          type: [number, 'null']
+          description: Δ = F − T
+        achieved:
+          type: [boolean, 'null']
+        scale:
           type: [string, 'null']
-        position:
+        source:
           type: [string, 'null']
-
-    ReportDto:
-      type: object
-      required: [teacher, period, status, totalScore, maxTotal, rows]
-      properties:
-        id:
-          type: [integer, 'null']
-          format: int64
-          description: null — отчёт ещё не отправлялся (черновик)
-        teacher:
-          $ref: '#/components/schemas/TeacherShort'
-        period:
-          $ref: '#/components/schemas/PeriodDto'
+        documentBasis:
+          type: [string, 'null']
         status:
-          $ref: '#/components/schemas/ReportStatus'
-        submittedAt:
+          $ref: '#/components/schemas/ResultStatus'
+        lastComment:
           type: [string, 'null']
-          format: date-time
-        returnComment:
-          type: [string, 'null']
-          description: Комментарий администратора при возврате
-        totalScore:
-          type: number
-        maxTotal:
-          type: number
-        rows:
-          type: array
-          items:
-            $ref: '#/components/schemas/CabinetRow'
-
-    CategoryScore:
-      type: object
-      required: [categoryId, categoryName, score]
-      properties:
-        categoryId:
+        version:
           type: integer
-          format: int64
-        categoryName:
+          format: int32
+          description: Версия значения, растёт при исправлении
+        enteredBy:
           type: string
-        score:
-          type: number
-
-    SummaryRow:
-      type: object
-      required: [place, teacherId, fullName, categoryScores, totalScore, status]
-      properties:
-        place:
-          type: integer
-          example: 1
-        teacherId:
-          type: integer
-          format: int64
-        fullName:
-          type: string
-        department:
-          type: [string, 'null']
-        categoryScores:
-          type: array
-          items:
-            $ref: '#/components/schemas/CategoryScore'
-        totalScore:
-          type: number
-        status:
-          $ref: '#/components/schemas/ReportStatus'
-
-    SummaryDto:
-      type: object
-      required: [period, categories, rows]
-      properties:
-        period:
-          $ref: '#/components/schemas/PeriodDto'
-        categories:
-          type: array
-          description: Колонки таблицы, в порядке вывода
-          items:
-            $ref: '#/components/schemas/CategoryDto'
-        rows:
-          type: array
-          items:
-            $ref: '#/components/schemas/SummaryRow'
-
-    ControlRow:
-      type: object
-      required: [teacherId, fullName, filledCount, indicatorCount, requiredFilled, requiredCount, totalScore]
-      properties:
-        teacherId:
-          type: integer
-          format: int64
-        fullName:
-          type: string
-        department:
-          type: [string, 'null']
-        filledCount:
-          type: integer
-        indicatorCount:
-          type: integer
-        requiredFilled:
-          type: integer
-        requiredCount:
-          type: integer
-        totalScore:
-          type: number
-        status:
-          description: null — за период нет ни одной записи
-          oneOf:
-            - $ref: '#/components/schemas/ReportStatus'
-            - type: 'null'
         updatedAt:
-          type: [string, 'null']
+          type: string
           format: date-time
-          description: Когда преподаватель последний раз менял записи
-
-    ControlDto:
+    MeasurementRequest:
       type: object
-      required: [period, teacherCount, submittedCount, inProgressCount, notStartedCount, rows]
+      description: Внесение и исправление значения.
+      required: [indicatorId, periodId, programId, value, numerator, denominator, source]
+      properties:
+        indicatorId:
+          type: integer
+          format: int64
+        periodId:
+          type: integer
+          format: int64
+        programId:
+          type: integer
+          format: int64
+        value:
+          type: [number, 'null']
+          description: Для непроцентных показателей
+        numerator:
+          type: [number, 'null']
+          description: Для процентных
+        denominator:
+          type: [number, 'null']
+          description: Для процентных
+        source:
+          type: [string, 'null']
+          maxLength: 500
+        scale:
+          type: [string, 'null']
+          maxLength: 100
+        documentBasis:
+          type: [string, 'null']
+          maxLength: 500
+    ScoreRow:
+      type: object
+      description: Баллы сотрудника по показателю.
+      required: [indicatorId, indicatorCode, indicatorName, category, basePoints, accrualMethod, maxPoints, approved,
+        onReview, entered, count]
+      properties:
+        indicatorId:
+          type: integer
+          format: int64
+        indicatorCode:
+          type: string
+        indicatorName:
+          type: string
+        category:
+          $ref: '#/components/schemas/Category'
+        basePoints:
+          type: number
+        accrualMethod:
+          $ref: '#/components/schemas/AccrualMethod'
+        maxPoints:
+          type: [number, 'null']
+        approved:
+          type: number
+          description: 'Утверждено директором: входит в официальный итог'
+        onReview:
+          type: number
+          description: На проверке или утверждении
+        entered:
+          type: number
+          description: Введено, но не отправлено
+        count:
+          type: integer
+          format: int32
+          description: Число достижений, по которым есть начисление
+    MyScoresDto:
+      type: object
+      description: Баллы сотрудника за период.
+      required: [period, rows, approvedTotal, onReviewTotal, enteredTotal]
       properties:
         period:
           $ref: '#/components/schemas/PeriodDto'
-        teacherCount:
-          type: integer
-        submittedCount:
-          type: integer
-          description: Отправлен или уже принят
-        inProgressCount:
-          type: integer
-          description: Черновик или возвращён на доработку
-        notStartedCount:
-          type: integer
-          description: Нет ни одной записи за период
         rows:
           type: array
           items:
-            $ref: '#/components/schemas/ControlRow'
-
-    ReturnRequest:
+            $ref: '#/components/schemas/ScoreRow'
+        approvedTotal:
+          type: number
+        onReviewTotal:
+          type: number
+        enteredTotal:
+          type: number
+    IndicatorSlice:
       type: object
-      required: [comment]
+      description: Срез по показателю.
+      required: [code, name, approved, pending, count]
       properties:
+        code:
+          type: string
+        name:
+          type: string
+        approved:
+          type: number
+        pending:
+          type: number
+        count:
+          type: integer
+          format: int32
+    PersonSlice:
+      type: object
+      description: Срез по сотруднику.
+      required: [userId, fullName, departmentName, approved, pending]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        fullName:
+          type: string
+        departmentName:
+          type: [string, 'null']
+        approved:
+          type: number
+        pending:
+          type: number
+    ProgramSlice:
+      type: object
+      description: Срез по программе.
+      required: [programId, programName, approved]
+      properties:
+        programId:
+          type: integer
+          format: int64
+        programName:
+          type: string
+        approved:
+          type: number
+    DynamicsPoint:
+      type: object
+      description: Точка динамики.
+      required: [periodName, approved]
+      properties:
+        periodName:
+          type: string
+        approved:
+          type: number
+    PpsDashboard:
+      type: object
+      description: Блок ППС.
+      required: [employees, approvedResults, approvedPoints, pendingPoints, onReviewShare, byIndicator, byEmployee,
+        byProgram, dynamics]
+      properties:
+        employees:
+          type: integer
+          format: int32
+        approvedResults:
+          type: integer
+          format: int32
+        approvedPoints:
+          type: number
+        pendingPoints:
+          type: number
+        onReviewShare:
+          type: number
+          description: Доля результатов на проверке или утверждении, %
+        byIndicator:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndicatorSlice'
+        byEmployee:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonSlice'
+        byProgram:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramSlice'
+        dynamics:
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicsPoint'
+    AupDashboard:
+      type: object
+      description: Блок АУП.
+      required: [employees, approvedPoints, pendingPoints, byIndicator, unconfirmed]
+      properties:
+        employees:
+          type: integer
+          format: int32
+        approvedPoints:
+          type: number
+        pendingPoints:
+          type: number
+        byIndicator:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndicatorSlice'
+        unconfirmed:
+          type: integer
+          format: int32
+          description: Результаты АУП без утверждения
+    ManagerSignals:
+      type: object
+      description: Управленческие сигналы.
+      required: [awaitingApproval, onReview, deviations, periodEnd]
+      properties:
+        awaitingApproval:
+          type: integer
+          format: int32
+        onReview:
+          type: integer
+          format: int32
+        deviations:
+          type: integer
+          format: int32
+          description: Целевые показатели РОП, которые не достигнуты
+        periodEnd:
+          type: string
+          format: date
+    DirectorDashboardDto:
+      type: object
+      description: Сводный дашборд трёх категорий.
+      required: [period, pps, aup, rop, signals]
+      properties:
+        period:
+          $ref: '#/components/schemas/PeriodDto'
+        pps:
+          $ref: '#/components/schemas/PpsDashboard'
+        aup:
+          $ref: '#/components/schemas/AupDashboard'
+        rop:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeasurementDto'
+        signals:
+          $ref: '#/components/schemas/ManagerSignals'
+    AuditEventDto:
+      type: object
+      description: Запись журнала аудита.
+      required: [id, at, actor, action, object, comment]
+      properties:
+        id:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        action:
+          type: string
+          description: CREATED, SUBMITTED, APPROVED, CLOSED и т. п.
+        object:
+          type: string
+          description: 'С чем: «Достижение #12 …», «Период …»'
         comment:
-          type: string
-          maxLength: 1000
-
-    PasswordChangeRequest:
+          type: [string, 'null']
+    PageOfAuditEvents:
       type: object
-      required: [currentPassword, newPassword]
+      description: Страница журнала аудита.
+      required: [content, page]
       properties:
-        currentPassword:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEventDto'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+    ImportType:
+      type: string
+      description: Набор загрузки.
+      enum: [EMPLOYEES, INDICATORS, MEASUREMENTS, ACHIEVEMENTS]
+    ImportRowDto:
+      type: object
+      description: Строка протокола импорта.
+      required: [row, action, key, message]
+      properties:
+        row:
+          type: integer
+          format: int32
+        action:
           type: string
-          format: password
-        newPassword:
+          description: NEW — создать, UPDATE — обновить, SKIP — уже есть, ERROR — не загрузится
+          enum: [NEW, UPDATE, SKIP, ERROR]
+        key:
           type: string
-          format: password
-          minLength: 8
+          description: Устойчивый ключ сопоставления
+        message:
+          type: [string, 'null']
+    ImportJobDto:
+      type: object
+      description: Загрузка XLSX.
+      required: [id, type, fileName, status, uploadedBy, uploadedAt, rows]
+      properties:
+        id:
+          type: integer
+          format: int64
+        type:
+          $ref: '#/components/schemas/ImportType'
+        fileName:
+          type: string
+        status:
+          type: string
+          description: VALIDATED — проверен и ждёт подтверждения, APPLIED — загружен
+          enum: [VALIDATED, APPLIED]
+        uploadedBy:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportRowDto'

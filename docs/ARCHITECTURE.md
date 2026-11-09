@@ -23,19 +23,36 @@
 | клиент | npm и Vite, в Maven не входит | `frontend/`, `frontend/Dockerfile`, конфигурация nginx |
 | база | готовый образ `postgres:16-alpine` | `docker-compose.yml` |
 
+## Предметная модель
+
+Основание — ТЗ «Система учёта показателей эффективности».
+
+- **Роли и категории независимы.** Роли: сотрудник (`EMPLOYEE`), проверяющий РОП (`REVIEWER`, в своей области), директор (`DIRECTOR`), суперадминистратор (`ADMIN`). Категории оценки: ППС, АУП, РОП. У человека может быть несколько тех и других.
+- **Показатель** имеет постоянный код и редакции. Правка создаёт новую редакцию, утверждённые результаты остаются на своей. К периоду относится редакция, действующая на дату его начала.
+- **Достижение** вносится один раз, относится к одному показателю и одному периоду и связывается со всеми авторами, включая внешних.
+- **Баллы.** У показателя порядка «индивидуально» автор получает B целиком, у показателя «на всех авторов» — `B × c × w / Σw`. Доли внешних авторов никому не перераспределяются. Официальные суммы округляются до двух знаков методом наибольших остатков. Итог по показателю за период — `min(M, Σ)`.
+- **Маршрут** у каждого достижения: `DRAFT` → `ON_REVIEW` → `REVIEWED` → `APPROVED`. С проверки результат можно вернуть (`RETURNED`) или отклонить (`REJECTED`), утверждённый — отправить на пересмотр (`REVISION`). В официальный итог входит только утверждённое.
+- **Своё проверять и утверждать нельзя.** Результаты самого РОП проверяет и утверждает директор двумя отдельными решениями. Администратор не заменяет директора при утверждении.
+- **Дубли.** Строгий ключ — вид достижения плюс нормализованный DOI или номер документа. Без строгого ключа ищутся похожие записи, и решение принимает проверяющий с обоснованием. Второй автор присоединяется к существующей записи.
+- **Целевые показатели РОП** — отдельный тип оценки: значение измеряется каждый период и уникально по редакции показателя, периоду и программе. Баллы по ним не начисляются.
+- **Пересмотр.** Утверждённая запись не редактируется напрямую: прежняя редакция сохраняется, новая проходит маршрут заново. Закрытие периода формирует снимок официальных итогов.
+
 ## Пакеты
 
 Пакеты лежат в `app/src/main/java/ru/fa/kpi/`.
 
 | Пакет | За что отвечает | Таблицы | Миграции |
 |---|---|---|---|
-| `common` | безопасность, формат ошибок, общие события | — | — |
-| `user` | пользователи, роли, вход и выход, смена пароля | `usr_` | V100–V199 |
-| `indicator` | категории, показатели, коэффициент, максимальный балл, архив, поля формы | `ind_` | V200–V299 |
-| `period` | отчётные периоды, проверка пересечения дат, закрытие | `per_` | V300–V399 |
-| `entry` | журнал достижений преподавателя по датам и файлы (подпакет `attachment`) | `ent_` | V400–V499 |
-| `scoring` | баллы: значение × коэффициент, но не больше максимума | `scr_` | V500–V599 |
-| `report` | кабинет, отправка отчёта, отчёт преподавателя, сводный отчёт, контроль сдачи | `rep_` | V600–V699 |
+| `common` | безопасность, формат ошибок, событие аудита | — | — |
+| `user` | сотрудники, вход и выход, смена пароля, роли, категории, полномочия, подразделения, программы | `usr_` | V100–V199 |
+| `indicator` | показатели и их редакции, архив | `ind_` | V200–V299 |
+| `period` | отчётные периоды, проверка пересечения дат, закрытие и переоткрытие | `per_` | V300–V399 |
+| `achievement` | единый реестр, участники и доли, подтверждения (подпакет `evidence`), дубли, маршрут согласования | `ach_` | V400–V499 |
+| `scoring` | начисления, итоги, снимок при закрытии периода | `scr_` | V500–V599 |
+| `report` | личные показатели, дашборд директора, выгрузки XLSX | своих нет | V600–V699 |
+| `measurement` | значения целевых показателей РОП | `msr_` | V700–V799 |
+| `audit` | журнал аудита | `aud_` | V800–V899 |
+| `importing` | импорт XLSX с предварительной проверкой | `imp_` | V900–V999 |
 
 В каждом пакете лежит `package-info.java`: в нём описание пакета и список пакетов, от которых ему разрешено зависеть.
 
@@ -44,33 +61,34 @@
 ```
 user    indicator    period          ни от кого, кроме common
    ↑        ↑          ↑
-   └───── entry ───────┘             проверяет: дата не в закрытом периоде и не в отправленном отчёте
-            │ событие EntryChanged
-            ▼
-         scoring → indicator, period
-            ↑
-         report → все пакеты
+   ├── achievement ────┤             маршрут, доли, дубли
+   │        │ события AchievementApproved, AchievementRejected
+   │        ▼
+   │     scoring → indicator, period начисления и итоги, снимок по событию PeriodClosed
+   │
+   └── measurement → indicator, period   цели РОП
 
-report публикует ReportSubmitted / ReportReturned (лежат в common),
-entry их слушает и блокирует или разблокирует записи
+report    → user, indicator, period, achievement, measurement, scoring
+importing → user, indicator, period, achievement, measurement
+audit     → только common, записывает событие AuditRecorded
 ```
 
 | Пакет | Может зависеть от |
 |---|---|
 | `common` | ни от кого |
-| `user`, `indicator`, `period` | `common` |
-| `entry` | `common`, `user`, `indicator`, `period` |
-| `scoring` | `common`, `entry`, `indicator`, `period` |
-| `report` | `common`, `user`, `indicator`, `period`, `entry`, `scoring` |
-
-`scoring` зависит от `period`, чтобы не пересчитывать баллы закрытых периодов, когда у показателя меняется коэффициент.
+| `user`, `indicator`, `period`, `audit` | `common` |
+| `achievement`, `measurement` | `common`, `user`, `indicator`, `period` |
+| `scoring` | `common`, `achievement`, `indicator`, `period` |
+| `report` | `common`, `user`, `indicator`, `period`, `achievement`, `measurement`, `scoring` |
+| `importing` | `common`, `user`, `indicator`, `period`, `achievement`, `measurement` |
 
 Таблицу проверяет тест `ModularityTest` (Spring Modulith): если пакет обратится к пакету, которого нет в его списке, тест упадёт. Новая зависимость появляется только через правку `package-info.java`.
 
 ## События
 
-- `EntryChanged` лежит в `entry` и публикуется при сохранении и при удалении записи. `scoring` слушает его синхронно (`@EventListener`) в той же транзакции и пересчитывает баллы всех открытых периодов, в которые попадает дата записи.
-- `ReportSubmitted` и `ReportReturned` лежат в `common`, потому что `report` зависит от `entry`, и обратная зависимость дала бы цикл.
+- `AchievementApproved` и `AchievementRejected` лежат в `achievement`. `scoring` слушает их синхронно (`@EventListener`) в той же транзакции: создаёт или отменяет начисления и пересчитывает итоги.
+- `PeriodClosed` лежит в `period`. `scoring` по нему формирует снимок итогов.
+- `AuditRecorded` лежит в `common`: его публикуют все пакеты, а `audit` записывает. Так пакетам не нужно зависеть от `audit`.
 - В событиях передаются только ID и простые значения, не сущности.
 
 ## Что лежит в пакете
@@ -94,22 +112,20 @@ entry их слушает и блокирует или разблокирует 
 Мапперы написаны вручную: статические методы `toDto(User)`, `toEntity(UserRequest)`, `update(User, UserRequest)`.
 
 - Поля переносятся явно, по одному.
-- `id`, роль, пароль и статус маппер из запроса не копирует. Их задаёт сервис: пароль сохраняет как хеш BCrypt, роль ставит только после проверки, что запрос пришёл от админа.
+- `id`, роли, пароль и статус маппер из запроса не копирует. Их задаёт сервис: пароль сохраняет как хеш BCrypt, роли ставит только после проверки, что запрос пришёл от админа, статус меняет только через маршрут.
 - DTO — `record`, поэтому новое поле не потеряется: без него не соберётся вызов конструктора.
 
 ## База и миграции
 
 Таблицы, колонки и индексы описаны в [DATABASE.md](DATABASE.md).
 
-- **Журнал по датам.** Запись преподавателя не привязана к периоду, у неё есть дата. Отчёт за любой период — записи, дата которых в него входит: статья от 15.10 попадает и в октябрь, и в семестр без повторного ввода. Периоды разных типов могут накладываться, одного типа — нет.
-- Кабинет без `periodId` показывает открытый период, в который попадает сегодняшняя дата; если таких несколько — самый длинный; если ни одного — открытый период с самой поздней датой окончания.
 - Схему меняют только миграции Flyway, Hibernate её проверяет (`ddl-auto: validate`).
 - Имя файла миграции: `V<номер>__<пакет>_<что_делает>.sql`, между номером и описанием два подчёркивания. Например, `V100__user_create_tables.sql`, следующая миграция пакета — `V101__user_add_position.sql`.
-- У каждого пакета свой диапазон номеров (таблица выше), поэтому пакеты пишут миграции независимо. Включено `spring.flyway.out-of-order: true`, иначе `V101`, добавленная после уже применённой `V600`, не накатится.
+- У каждого пакета свой диапазон номеров (таблица выше), поэтому пакеты пишут миграции независимо. Включено `spring.flyway.out-of-order: true`, иначе `V101`, добавленная после уже применённой `V900`, не накатится.
 - Применённая миграция не редактируется, правка делается новой миграцией.
 - Между пакетами хранятся только ID, без внешних ключей и JOIN.
 - Миграции лежат в `app/src/main/resources/db/migration`, тестовые данные — в `db/seed`, они подключаются только в профиле `dev`.
-- Кафедра — строка у пользователя (`department`), обязательна только у преподавателя. В формах кафедру выбирают из списка, чтобы одна кафедра не записывалась по-разному.
+- Баллы и доли — `NUMERIC` в базе и `BigDecimal` в коде, расчёт только на сервере.
 
 ## Безопасность
 
@@ -117,6 +133,7 @@ entry их слушает и блокирует или разблокирует 
 
 - Вход по сессии в cookie `JSESSIONID` (HttpOnly), пароли хранятся как хеш BCrypt.
 - Без входа открыты `GET /api/auth/csrf`, `POST /api/auth/login` и `GET /api/health`. Остальные адреса `/api` требуют входа, роль проверяется через `@PreAuthorize`.
+- Область доступа (программы РОП) и запрет проверять своё проверяются в сервисах, потому что зависят от конкретной записи.
 - CSRF: токен приходит в cookie `XSRF-TOKEN`, клиент возвращает его в заголовке `X-XSRF-TOKEN`.
 - Выход `POST /api/auth/logout` работает средствами Spring Security и отвечает 204.
 - Ошибки 401 и 403, в том числе из фильтров Spring Security, приходят в том же формате ProblemDetail, что и остальные.
@@ -129,9 +146,9 @@ entry их слушает и блокирует или разблокирует 
 |---|---|
 | ошибка в полях запроса, тексты по полям в `errors` | 400 |
 | нет входа | 401 |
-| нет прав, чужие данные, нет CSRF-токена | 403 |
+| нет прав, чужие данные, своё достижение на проверке, нет CSRF-токена | 403 |
 | `NotFoundException` | 404 |
-| `ConflictException`: период закрыт, периоды пересекаются, нет обязательных показателей | 409 |
+| `ConflictException`: статус не позволяет действие, период закрыт, периоды пересекаются, дубль | 409 |
 | непредвиденная ошибка, подробности только в логе | 500 |
 
 ## API и Swagger
@@ -145,7 +162,7 @@ entry их слушает и блокирует или разблокирует 
 Клиент React живёт отдельно от Java-кода: собирается командой `npm run build` в статические файлы, их раздаёт nginx в контейнере `frontend`.
 
 - nginx пересылает в бэкенд `/api`, Swagger (`/swagger-ui`, `/v3/api-docs`) и `/openapi.yaml`. Для браузера сайт и API живут на одном адресе, поэтому CORS не нужен, cookie сессии и CSRF работают без настройки.
-- Любой другой адрес (`/admin/users`, `/cabinet`) nginx отдаёт как `index.html`, экран выбирает React Router.
+- Любой другой адрес (`/admin/users`, `/reports`) nginx отдаёт как `index.html`, экран выбирает React Router.
 - Бэкенд стоит за прокси, поэтому включено `server.forward-headers-strategy: framework`: адрес и схему запроса Spring берёт из заголовков `X-Forwarded-*`.
 - При разработке клиент запускается через `npm run dev`: Vite поднимается на `localhost:5173` и пересылает `/api` на `localhost:8080`.
 
@@ -161,7 +178,7 @@ entry их слушает и блокирует или разблокирует 
 
 - Сборка идёт внутри Docker, поэтому на компьютере не нужны Java, Maven и Node.
 - Порядок запуска: база готова (`pg_isready`) → бэкенд готов (`/api/health`) → nginx.
-- Файлы к записям лежат в томе `uploads`, путь передаётся переменной `APP_STORAGE_DIR` (`app.storage.dir`).
+- Файлы к достижениям лежат в томе `uploads`, путь передаётся переменной `APP_STORAGE_DIR` (`app.storage.dir`).
 - Пароли хранятся в `.env`, в репозитории только `.env.example`.
 - `docker-compose.override.yml` используется при локальной работе: открывает порты базы и бэкенда, включает профиль `dev`.
 
@@ -197,23 +214,28 @@ center-metrics/
         │   │   ├── CsrfController.java       GET /api/auth/csrf
         │   │   ├── ApiExceptionHandler.java  ошибки в формате ProblemDetail
         │   │   ├── NotFoundException.java, ConflictException.java
-        │   │   └── ReportSubmitted.java, ReportReturned.java
-        │   ├── user/          User, Role, UserRepository, UserMapper, UserController, AuthController,
-        │   │                  UserRequest, LoginRequest, UserDto, UserService
-        │   ├── indicator/     Indicator, Category, репозитории, мапперы, контроллеры,
-        │   │                  IndicatorRequest, CategoryRequest, IndicatorDto, CategoryDto, IndicatorService
+        │   │   └── AuditRecorded.java        событие для журнала аудита
+        │   ├── user/          User, Role, Category, Department, Program, RoleAssignment, репозитории, мапперы,
+        │   │                  контроллеры, UserRequest, LoginRequest, UserDto, PersonShort, UserService
+        │   ├── indicator/     Indicator, IndicatorVersion, IndicatorRepository, IndicatorMapper, IndicatorController,
+        │   │                  IndicatorRequest, IndicatorDto, IndicatorService
         │   ├── period/        Period, PeriodType, PeriodRepository, PeriodMapper, PeriodController,
-        │   │                  PeriodRequest, PeriodDto, PeriodService
-        │   ├── entry/         Entry, EntryRepository, EntryMapper, EntryController, EntryRequest, EntryDto,
-        │   │                  EntryService, EntryChanged, ReportEventsListener,
-        │   │                  attachment/ (Attachment, AttachmentRepository, AttachmentController, FileStorage, AttachmentDto)
-        │   ├── scoring/       Score, ScoreRepository, ScoreCalculator, EntryChangedListener, ScoreDto, ScoringService
-        │   └── report/        Report, ReportStatus, ReportRepository, ReportMapper, ReportController, CabinetController,
-        │                      ReportDto, SummaryRowDto, ControlRowDto, CabinetDto, ReportService
+        │   │                  PeriodRequest, PeriodDto, PeriodService, PeriodClosed
+        │   ├── achievement/   Achievement, Participant, Decision, ResultStatus, ShareCalculator, IdentifierNormalizer,
+        │   │                  репозитории, мапперы, AchievementController, AchievementRequest, AchievementDto,
+        │   │                  AchievementService, AchievementApproved, AchievementRejected,
+        │   │                  evidence/ (Evidence, EvidenceRepository, EvidenceController, FileStorage, EvidenceDto)
+        │   ├── scoring/       Accrual, Score, PeriodSnapshot, репозитории, ScoreCalculator, слушатели событий,
+        │   │                  ScoreDto, ScoringService
+        │   ├── report/        ScoresController, DashboardController, ReportController, XlsxWriter, ReportService, DTO
+        │   ├── measurement/   Measurement, MeasurementRepository, MeasurementMapper, MeasurementController,
+        │   │                  MeasurementRequest, MeasurementDto, MeasurementService
+        │   ├── audit/         AuditEvent, AuditRepository, AuditListener, AuditController, AuditEventDto
+        │   └── importing/     ImportJob, ImportRow, репозитории, ImportController, разбор наборов, ImportJobDto, ImportService
         ├── main/resources/
         │   ├── application.yml           база из DB_URL, DB_USER, DB_PASSWORD; файлы в APP_STORAGE_DIR
         │   ├── application-dev.yml       локальная база и тестовые данные
-        │   ├── db/migration/             миграции Flyway V100–V699
+        │   ├── db/migration/             миграции Flyway V100–V999
         │   ├── db/seed/                  тестовые данные
         │   └── static/openapi.yaml       контракт API для Swagger UI
         └── test/java/ru/fa/kpi/

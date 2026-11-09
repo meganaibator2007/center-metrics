@@ -1,10 +1,8 @@
--- Пакет period: отчётные периоды.
--- Периоды одного типа не пересекаются. Это проверяет сервис (ответ 409),
+-- Пакет period: отчётные периоды, календарные и произвольные (ФР-09).
+-- Достижение относится ровно к одному периоду, поэтому в итоги двух периодов не попадёт.
+-- Периоды одного календарного типа не пересекаются. Это проверяет сервис (ответ 409),
 -- а ограничение EXCLUDE страхует от двух одновременных запросов.
--- Для него нужно расширение btree_gist: оно входит в стандартный PostgreSQL.
--- Периоды разных типов могут накладываться (семестр и октябрь внутри него): записи общие,
--- отчёт за каждый период собирается по датам. Кабинет без periodId показывает открытый период,
--- в который попадает сегодняшняя дата, а если таких несколько — самый длинный.
+-- Произвольные периоды (CUSTOM) и периоды разных типов могут накладываться.
 
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
@@ -16,20 +14,22 @@ CREATE TABLE per_period (
     end_date   DATE         NOT NULL,
     status     VARCHAR(20)  NOT NULL DEFAULT 'OPEN',
     closed_at  TIMESTAMPTZ,
+    closed_by  BIGINT,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
-    CONSTRAINT per_period_type_ck CHECK (type IN ('MONTH', 'QUARTER', 'SEMESTER', 'YEAR')),
+    CONSTRAINT per_period_type_ck CHECK (type IN ('MONTH', 'QUARTER', 'SEMESTER', 'HALF_YEAR', 'YEAR', 'ACADEMIC_YEAR', 'CUSTOM')),
     CONSTRAINT per_period_status_ck CHECK (status IN ('OPEN', 'CLOSED')),
     CONSTRAINT per_period_dates_ck CHECK (end_date >= start_date),
     CONSTRAINT per_period_closed_ck CHECK ((status = 'CLOSED') = (closed_at IS NOT NULL)),
+    CONSTRAINT per_period_closed_by_ck CHECK ((status = 'CLOSED') = (closed_by IS NOT NULL)),
     CONSTRAINT per_period_no_overlap_ex EXCLUDE USING gist (
         type WITH =,
         daterange(start_date, end_date, '[]') WITH &&
-    )
+    ) WHERE (type <> 'CUSTOM')
 );
 
 CREATE INDEX per_period_dates_idx ON per_period (start_date, end_date);
 
-COMMENT ON TABLE per_period IS 'Отчётные периоды: месяц, квартал, семестр, учебный год';
-COMMENT ON COLUMN per_period.status IS 'OPEN — данные можно вносить; CLOSED — записи не меняются, баллы не пересчитываются';
+COMMENT ON TABLE per_period IS 'Отчётные периоды. Переоткрытие закрытого периода записывается в журнал аудита с основанием';
+COMMENT ON COLUMN per_period.status IS 'OPEN — можно вносить данные; CLOSED — сформирован снимок итогов, изменения только через пересмотр';
