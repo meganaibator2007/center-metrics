@@ -1,15 +1,24 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
+import { useMock } from '../../api/client'
 import { ApiError } from '../../api/errors'
-import { homeFor } from '../../auth/context'
 import { useAuth } from '../../auth/useAuth'
 
 const LOGO_ALT = 'Финансовый университет при Правительстве Российской Федерации'
-const useMock = import.meta.env.VITE_API_MOCK === 'true'
+
+const DEMO_USERS = [
+  ['a.ivanova', 'сотрудник ППС'],
+  ['p.sokolov', 'сотрудник ППС'],
+  ['m.petrova', 'РОП «Программная инженерия» и ППС'],
+  ['n.kozlova', 'РОП «Прикладная математика» и ППС'],
+  ['d.orlov', 'директор'],
+  ['k.volkova', 'сотрудник АУП'],
+  ['e.smirnova', 'суперадминистратор'],
+]
 
 /** Вход в систему (T-26): форма из прототипа prototype/templates/user/login.html */
 export function LoginPage() {
-  const { user, login } = useAuth()
+  const { user, login, signedOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [loginValue, setLoginValue] = useState('')
@@ -21,7 +30,7 @@ export function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from
 
   if (user) {
-    return <Navigate to={from ?? homeFor(user.role)} replace />
+    return <Navigate to={from ?? '/'} replace />
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -29,14 +38,12 @@ export function LoginPage() {
     setError(null)
     setSubmitting(true)
     try {
-      const current = await login(loginValue.trim(), password)
-      navigate(from ?? homeFor(current.role), { replace: true })
+      await login(loginValue.trim(), password)
+      navigate(from ?? '/', { replace: true })
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 401
-          ? 'Неверный логин или пароль'
-          : 'Сервер недоступен. Попробуйте ещё раз через минуту.',
-      )
+      if (err instanceof ApiError && err.status === 401) setError(err.problem.detail ?? 'Неверный логин или пароль')
+      else if (err instanceof ApiError && err.status > 0) setError(err.problem.detail ?? `Ошибка ${err.status}. Обновите страницу и попробуйте снова.`)
+      else setError('Сервер недоступен. Попробуйте ещё раз через минуту.')
     } finally {
       setSubmitting(false)
     }
@@ -47,10 +54,10 @@ export function LoginPage() {
       <section className="auth__brand">
         <img className="auth__logo" src="/img/logo-white.svg" alt={LOGO_ALT} width={240} height={77} />
         <div>
-          <h1 className="auth__title">Учёт показателей деятельности центра</h1>
+          <h1 className="auth__title">Учёт показателей эффективности</h1>
           <p className="auth__text">
-            Вносите результаты работы за отчётный период — баллы посчитаются автоматически, а отчёт для
-            руководства соберётся сам.
+            Единый реестр достижений ППС и АУП, целевые показатели РОП, проверка и утверждение результатов,
+            дашборд директора.
           </p>
         </div>
         <p className="auth__foot">Учебный проект · Финансовый университет, 2026</p>
@@ -62,6 +69,11 @@ export function LoginPage() {
           <p className="muted">Логин и пароль выдаёт администратор центра.</p>
 
           <form className="form" onSubmit={handleSubmit}>
+            {signedOut === 'expired' && !error && (
+              <div className="alert" role="status">
+                <p>Сессия истекла — войдите снова.</p>
+              </div>
+            )}
             {error && (
               <div className="alert alert--error" role="alert">
                 <p>{error}</p>
@@ -108,9 +120,17 @@ export function LoginPage() {
           {useMock && (
             <div className="demo-box">
               <p className="demo-box__title">Заглушки API: сервер не нужен</p>
-              <p className="text-small">
-                Преподаватель — <code>a.ivanova</code>, администратор — <code>e.smirnova</code>, пароль любой.
-              </p>
+              <p className="text-small">Пароль любой. Пользователи:</p>
+              <ul className="list-plain text-small">
+                {DEMO_USERS.map(([login, role]) => (
+                  <li key={login}>
+                    <button type="button" className="btn btn--small btn--outline" onClick={() => setLoginValue(login)}>
+                      {login}
+                    </button>{' '}
+                    {role}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

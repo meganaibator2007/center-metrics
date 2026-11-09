@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router'
+import { Alert } from '../components/ui'
+import { errorText } from '../lib/errors'
 import { useAuth } from '../auth/useAuth'
-import { NAV, ROLE_LABEL } from './nav'
+import { ROLE_LABEL } from '../lib/labels'
+import { navFor } from './nav'
 
 const LOGO_ALT = 'Финансовый университет при Правительстве Российской Федерации'
 
@@ -8,11 +12,17 @@ const LOGO_ALT = 'Финансовый университет при Прави�
 export function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const items = user ? NAV[user.role] : []
+  const items = user ? navFor(user) : []
+  const [logoutError, setLogoutError] = useState<string | null>(null)
 
   async function handleLogout() {
-    await logout()
-    navigate('/login', { replace: true })
+    setLogoutError(null)
+    try {
+      await logout()
+      navigate('/login', { replace: true })
+    } catch (error) {
+      setLogoutError(errorText(error))
+    }
   }
 
   return (
@@ -20,11 +30,15 @@ export function AppLayout() {
       <div className="topbar">
         <div className="container">
           <span className="topbar__product">
-            Финансовый университет · Система учёта показателей деятельности центра
+            Финансовый университет · Система учёта показателей эффективности
           </span>
           {user && (
             <div className="topbar__user">
-              <span className="badge badge--role badge--plain">{ROLE_LABEL[user.role]}</span>
+              {user.roles.map((role) => (
+                <span key={role} className="badge badge--role badge--plain">
+                  {ROLE_LABEL[role]}
+                </span>
+              ))}
               <span>{user.fullName}</span>
               <button type="button" className="topbar__logout" onClick={handleLogout}>
                 Выйти
@@ -41,15 +55,14 @@ export function AppLayout() {
             <span className="header__product">
               Показатели
               <br />
-              деятельности центра
+              эффективности
             </span>
           </Link>
           {items.length > 0 && (
             <nav className="nav" aria-label="Основное меню">
               {items.map((item) => (
-                <NavLink key={item.to} to={item.to}>
+                <NavLink key={item.to} to={item.to} end={item.to === '/'}>
                   {item.label}
-                  {item.soon && <span className="soon">скоро</span>}
                 </NavLink>
               ))}
             </nav>
@@ -59,6 +72,11 @@ export function AppLayout() {
 
       <main className="page">
         <div className="container">
+          {logoutError && (
+            <Alert kind="error" title="Не удалось выйти">
+              {logoutError}
+            </Alert>
+          )}
           <Outlet />
         </div>
       </main>
@@ -68,8 +86,8 @@ export function AppLayout() {
           <div>
             <img className="footer__logo" src="/img/logo-white.svg" alt={LOGO_ALT} width={190} height={61} />
             <p className="footer__text">
-              Система учёта показателей деятельности центра: ввод данных преподавателями, автоматический
-              расчёт баллов, отчёты для руководства
+              Система учёта показателей эффективности: единый реестр достижений, расчёт баллов ППС и АУП,
+              целевые показатели РОП, согласование и утверждение результатов
             </p>
           </div>
           <div>

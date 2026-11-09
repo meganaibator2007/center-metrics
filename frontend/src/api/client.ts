@@ -2,12 +2,11 @@
 // функции из src/api/*.ts, а не fetch напрямую (техсоглашения, раздел 3.4).
 
 import { ApiError } from './errors'
-import { mockRequest } from './mock'
 import type { ProblemDetail } from './types'
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
-const useMock = import.meta.env.VITE_API_MOCK === 'true'
+export const useMock = import.meta.env.VITE_API_MOCK === 'true'
 
 // Spring Security кладёт CSRF-токен в cookie XSRF-TOKEN
 // и ждёт его обратно в заголовке X-XSRF-TOKEN.
@@ -26,13 +25,40 @@ async function csrfToken(): Promise<string | null> {
   return readCookie(CSRF_COOKIE)
 }
 
+// Сессия истекла посреди работы (сервер перезапустился, вышли в другой вкладке):
+// AuthProvider подписывается и сбрасывает пользователя, RequireRole отправляет на вход.
+type Listener = () => void
+const unauthorizedListeners = new Set<Listener>()
+
+export function onUnauthorized(listener: Listener): () => void {
+  unauthorizedListeners.add(listener)
+  return () => unauthorizedListeners.delete(listener)
+}
+
+/** Запросы, где 401 — обычный ответ, а не «сессия истекла» */
+const AUTH_PATHS = ['/auth/me', '/auth/login']
+
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  try {
+    return await send<T>(method, path, body)
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401 && !AUTH_PATHS.includes(path)) {
+      unauthorizedListeners.forEach((listener) => listener())
+    }
+    throw error
+  }
+}
+
+async function send<T>(method: Method, path: string, body?: unknown): Promise<T> {
   if (useMock) {
+    // Заглушки грузятся отдельным файлом только в режиме разработки и в сборку не попадают
+    const { mockRequest } = await import('./mock')
     return mockRequest<T>(method, path, body)
   }
 
+  const isForm = body instanceof FormData
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (body !== undefined) {
+  if (body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json'
   }
   if (method !== 'GET') {
@@ -40,12 +66,18 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
     if (token) headers[CSRF_HEADER] = token
   }
 
-  const response = await fetch(`/api${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    credentials: 'same-origin',
-  })
+  let response: Response
+  try {
+    response = await fetch(`/api${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
+      credentials: 'same-origin',
+    })
+  } catch {
+    // Сеть недоступна или nginx не достучался до сервера
+    throw new ApiError(0, { title: 'Сервер недоступен' })
+  }
 
   if (!response.ok) {
     let problem: ProblemDetail = {}
@@ -61,4 +93,9 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
     return undefined as T
   }
   return (await response.json()) as T
+}
+
+/** Адрес файла для скачивания (XLSX, вложения): браузер сам отправит cookie сессии */
+export function fileUrl(path: string): string {
+  return `/api${path}`
 }

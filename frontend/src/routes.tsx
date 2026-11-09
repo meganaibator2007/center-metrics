@@ -1,44 +1,82 @@
-import { createBrowserRouter, Navigate } from 'react-router'
-import { HomeRedirect } from './auth/HomeRedirect'
+import { createBrowserRouter } from 'react-router'
 import { RequireRole } from './auth/RequireRole'
 import { AppLayout } from './layout/AppLayout'
-import { ForbiddenPage, NotFoundPage, SoonPage } from './pages/error/ErrorPages'
-import { PlannedPage } from './pages/PlannedPage'
+import { AchievementFormPage } from './pages/achievement/AchievementFormPage'
+import { AchievementPage } from './pages/achievement/AchievementPage'
+import { AchievementsPage } from './pages/achievement/AchievementsPage'
+import { QueuePage } from './pages/achievement/QueuePage'
+import { RegistryPage } from './pages/achievement/RegistryPage'
+import { AuditPage } from './pages/admin/AuditPage'
+import { ImportPage } from './pages/admin/ImportPage'
+import { IndicatorFormPage, IndicatorsPage } from './pages/admin/IndicatorsPage'
+import { PeriodsPage } from './pages/admin/PeriodsPage'
+import { UserFormPage, UsersPage } from './pages/admin/UsersPage'
+import { ForbiddenPage, NotFoundPage, ServerErrorPage, SoonPage } from './pages/error/ErrorPages'
+import { HomePage } from './pages/home/HomePage'
+import { MyIndicatorsPage } from './pages/home/MyIndicatorsPage'
+import { AnalyticsPage } from './pages/reports/AnalyticsPage'
+import { ReportsPage } from './pages/reports/ReportsPage'
+import { TargetsPage } from './pages/targets/TargetsPage'
 import { LoginPage } from './pages/user/LoginPage'
 
-// Все экраны MVP уже есть как маршруты. PlannedPage заменяется настоящим экраном
-// по мере переноса из прототипа; в task и due — задача и срок по плану до 20.11.
+// Разделы интерфейса по ТЗ, раздел 10. RequireRole — удобство: права проверяет сервер.
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
+  { path: '/login', element: <LoginPage />, errorElement: <ServerErrorPage /> },
   {
     path: '/',
     element: <AppLayout />,
+    errorElement: <ServerErrorPage />,
     children: [
-      { index: true, element: <HomeRedirect /> },
       {
-        element: <RequireRole role="TEACHER" />,
+        element: <RequireRole />,
         children: [
-          { path: 'cabinet', element: <PlannedPage title="Личный кабинет" task="T-47, T-62" due="12.11" /> },
-          { path: 'entries/new', element: <PlannedPage title="Ввод данных" task="T-50, T-52, T-56" due="13.11" /> },
-          { path: 'report', element: <PlannedPage title="Мой отчёт" task="T-67" due="14.11" /> },
-          { path: 'report/submit', element: <PlannedPage title="Отправка отчёта" task="T-65" due="14.11" /> },
+          { index: true, element: <HomePage /> },
+          { path: 'achievements/:id', element: <AchievementPage /> },
+          { path: 'reports', element: <ReportsPage /> },
+        ],
+      },
+      {
+        element: <RequireRole roles={['EMPLOYEE']} />,
+        children: [{ path: 'my/indicators', element: <MyIndicatorsPage /> }],
+      },
+      {
+        element: <RequireRole roles={['EMPLOYEE', 'ADMIN', 'REVIEWER']} />,
+        children: [
+          { path: 'my/achievements', element: <AchievementsPage /> },
+          { path: 'my/achievements/new', element: <AchievementFormPage /> },
+          { path: 'my/achievements/:id/edit', element: <AchievementFormPage /> },
+        ],
+      },
+      {
+        element: <RequireRole roles={['REVIEWER']} />,
+        children: [{ path: 'review', element: <QueuePage mode="review" /> }],
+      },
+      {
+        element: <RequireRole roles={['DIRECTOR']} />,
+        children: [{ path: 'approval', element: <QueuePage mode="approval" /> }],
+      },
+      {
+        element: <RequireRole roles={['REVIEWER', 'DIRECTOR', 'ADMIN']} />,
+        children: [
+          { path: 'targets', element: <TargetsPage /> },
+          { path: 'registry', element: <RegistryPage /> },
+          { path: 'analytics', element: <AnalyticsPage /> },
         ],
       },
       {
         path: 'admin',
-        element: <RequireRole role="ADMIN" />,
+        element: <RequireRole roles={['ADMIN']} />,
         children: [
-          { index: true, element: <Navigate to="control" replace /> },
-          { path: 'control', element: <PlannedPage title="Контроль сдачи" task="T-74" due="16.11" /> },
-          { path: 'summary', element: <PlannedPage title="Сводный отчёт" task="T-69" due="16.11" /> },
-          { path: 'indicators', element: <PlannedPage title="Справочник показателей" task="T-36" due="10.11" /> },
-          { path: 'indicators/new', element: <PlannedPage title="Новый показатель" task="T-37" due="10.11" /> },
-          { path: 'periods', element: <PlannedPage title="Отчётные периоды" task="T-42, T-44" due="13.11" /> },
-          { path: 'users', element: <PlannedPage title="Пользователи" task="T-31" due="11.11" /> },
-          {
-            path: 'reports/:teacherId',
-            element: <PlannedPage title="Отчёт преподавателя" task="T-67" due="16.11" />,
-          },
+          { index: true, element: <HomePage /> },
+          { path: 'users', element: <UsersPage /> },
+          { path: 'users/new', element: <UserFormPage /> },
+          { path: 'users/:id', element: <UserFormPage /> },
+          { path: 'indicators', element: <IndicatorsPage /> },
+          { path: 'indicators/new', element: <IndicatorFormPage /> },
+          { path: 'indicators/:id', element: <IndicatorFormPage /> },
+          { path: 'periods', element: <PeriodsPage /> },
+          { path: 'import', element: <ImportPage /> },
+          { path: 'audit', element: <AuditPage /> },
         ],
       },
       { path: 'soon/:feature', element: <SoonPage /> },

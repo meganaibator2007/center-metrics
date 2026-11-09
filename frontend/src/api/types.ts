@@ -1,7 +1,7 @@
 // Формы данных, которыми обмениваются клиент и сервер.
-// Имена и поля повторяют схемы из app/src/main/resources/static/openapi.yaml
-// (контракт Готовца В., docs/api.md). Меняется контракт — правим и этот файл.
-// Сюда перенесено всё, что нужно для MVP; методы «после защиты» не описаны.
+// Модель повторяет ТЗ «Система учёта показателей эффективности» (разделы 2–6, 11.1)
+// и «Порядок начисления баллов». Это предложение контракта для openapi.yaml:
+// меняется контракт — правим и этот файл.
 
 // ---------- Общее ----------
 
@@ -16,7 +16,6 @@ export interface ProblemDetail {
   errors?: Record<string, string>
 }
 
-/** Страница списка: сейчас постранично отдаётся только GET /api/users */
 export interface PageMeta {
   size: number
   /** Номер страницы с нуля */
@@ -30,16 +29,33 @@ export interface Page<T> {
   page: PageMeta
 }
 
-// ---------- Вход и пользователи (пакет user) ----------
+/** Дата ГГГГ-ММ-ДД */
+export type IsoDate = string
+/** Дата и время ISO 8601 */
+export type IsoDateTime = string
 
-export type Role = 'TEACHER' | 'ADMIN'
+// ---------- Пользователи и оргструктура (ТЗ 2, ФР-01) ----------
 
-export interface LoginRequest {
-  login: string
-  password: string
+/** Функциональные роли (ТЗ 2.1). У одного человека их может быть несколько */
+export type Role = 'EMPLOYEE' | 'REVIEWER' | 'DIRECTOR' | 'ADMIN'
+
+/** Категории оценки (ТЗ 1.2): у сотрудника может быть несколько */
+export type Category = 'PPS' | 'AUP' | 'ROP'
+
+export interface DepartmentDto {
+  id: number
+  name: string
 }
 
-/** Пользователь. Его же возвращают POST /api/auth/login и GET /api/auth/me */
+/** Образовательная программа */
+export interface ProgramDto {
+  id: number
+  code: string
+  name: string
+  /** Программа «топ-ИТ»: только её дисциплины учитываются в показателях ППС 3–7 */
+  topIt: boolean
+}
+
 export interface UserDto {
   id: number
   login: string
@@ -48,11 +64,14 @@ export interface UserDto {
   lastName: string
   firstName: string
   middleName: string | null
-  role: Role
-  /** Кафедра строкой, без отдельного справочника */
-  department: string | null
+  roles: Role[]
+  categories: Category[]
+  departmentId: number | null
+  departmentName: string | null
   position: string | null
-  /** false — пользователь заблокирован */
+  /** Программы сотрудника; у РОП — его область проверки (scope) */
+  programIds: number[]
+  /** false — учётная запись деактивирована */
   active: boolean
 }
 
@@ -60,217 +79,411 @@ export interface UserRequest {
   lastName: string
   firstName: string
   middleName: string | null
-  /** Латинские буквы, цифры, точка, дефис: ^[a-z0-9.-]{3,50}$ */
   login: string
+  roles: Role[]
+  categories: Category[]
+  departmentId: number | null
   position: string | null
-  role: Role
-  department: string
-  /** Временный пароль, не короче 8 символов. Обязателен при создании, при изменении игнорируется */
+  programIds: number[]
+  /** Временный пароль: обязателен при создании, при изменении игнорируется */
   password: string | null
 }
 
-export interface UserActiveRequest {
-  active: boolean
+export interface LoginRequest {
+  login: string
+  password: string
 }
 
-// ---------- Категории и показатели (пакет indicator) ----------
-
-export interface CategoryDto {
+/** Краткие сведения о человеке в списках и карточках */
+export interface PersonShort {
   id: number
-  name: string
+  fullName: string
+  departmentName: string | null
 }
 
-export interface CategoryRequest {
-  name: string
-}
+// ---------- Справочник показателей (ФР-02) ----------
 
-/** Поле формы ввода показателя. Редактор полей — после защиты, до него список пустой */
-export interface IndicatorField {
-  /** Имя поля в EntryDto.fields */
-  key: string
-  label: string
-  type: 'TEXT' | 'NUMBER' | 'DATE' | 'URL'
-  required: boolean
-}
+/** Тип оценки: баллы (ППС, АУП) или целевое значение (РОП) */
+export type EvaluationType = 'POINTS' | 'TARGET'
+
+/** Порядок начисления (ТЗ 6.1) */
+export type AccrualMethod = 'INDIVIDUAL' | 'SHARED'
+
+/** Направление сравнения с целевым значением (ТЗ 6.3) */
+export type TargetDirection = 'AT_LEAST' | 'AT_MOST'
 
 export interface IndicatorDto {
   id: number
-  categoryId: number
-  categoryName: string
+  /** Код показателя: ППС-01, АУП-04, РОП-11 */
+  code: string
   name: string
+  category: Category
+  evaluationType: EvaluationType
   unit: string
+  /** Базовый балл B за одно достижение; null у целевых показателей */
+  basePoints: number | null
+  /** Порядок начисления; null у целевых показателей */
+  accrualMethod: AccrualMethod | null
+  /** Целевое значение T; null у балльных показателей */
+  targetValue: number | null
+  /** Факт считается как процент: числитель / знаменатель × 100 */
+  percent: boolean
+  direction: TargetDirection | null
+  /** Коэффициент c, по умолчанию 1 (ТЗ 6.2) */
   coefficient: number
-  maxScore: number
-  /** Без обязательного показателя отчёт не отправить */
-  required: boolean
+  /** Максимальный балл за период; null — без ограничения */
+  maxPoints: number | null
+  /** Сколько раз за период можно начислить; null — без ограничения */
+  maxRepeats: number | null
+  /** Нужна образовательная программа топ-ИТ (дисциплина из её учебного плана) */
+  requiresProgram: boolean
+  /** Подтверждающие документы, как в «Порядке начисления баллов» */
+  evidence: string
+  /** Редакция показателя; новая редакция не меняет утверждённые результаты */
+  version: number
   archived: boolean
-  /** Пояснение для преподавателей */
-  description: string | null
-  fields: IndicatorField[]
 }
 
 export interface IndicatorRequest {
-  categoryId: number
+  code: string
   name: string
+  category: Category
+  evaluationType: EvaluationType
   unit: string
+  basePoints: number | null
+  accrualMethod: AccrualMethod | null
+  targetValue: number | null
+  percent: boolean
+  direction: TargetDirection | null
   coefficient: number
-  maxScore: number
-  required: boolean
-  description: string | null
+  maxPoints: number | null
+  maxRepeats: number | null
+  requiresProgram: boolean
+  evidence: string
 }
 
-// ---------- Отчётные периоды (пакет period) ----------
+// ---------- Отчётные периоды (ФР-09) ----------
 
-export type PeriodType = 'MONTH' | 'QUARTER' | 'SEMESTER' | 'YEAR'
+export type PeriodType = 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR' | 'CUSTOM'
 
 export interface PeriodDto {
   id: number
   name: string
   type: PeriodType
-  /** Дата в формате ГГГГ-ММ-ДД */
-  startDate: string
-  endDate: string
+  startDate: IsoDate
+  endDate: IsoDate
   closed: boolean
+  closedAt: IsoDateTime | null
 }
 
 export interface PeriodRequest {
   name: string
   type: PeriodType
-  startDate: string
-  endDate: string
+  startDate: IsoDate
+  endDate: IsoDate
 }
 
-// ---------- Записи и файлы (пакет entry) ----------
+// ---------- Достижения (ФР-03, ФР-04, раздел 5) ----------
 
-export interface AttachmentDto {
+/** Маршрут обработки результата (ТЗ 4.1) */
+export type ResultStatus =
+  | 'DRAFT'
+  | 'ON_REVIEW'
+  | 'RETURNED'
+  | 'REVIEWED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'REVISION'
+
+/** Вид идентификатора для проверки дублей (ТЗ 5.2) */
+export type IdentifierType = 'DOI' | 'URL' | 'DOC_NUMBER'
+
+/** Участник достижения: сотрудник или внешний соавтор */
+export interface ParticipantDto {
+  /** null — внешний соавтор */
+  userId: number | null
+  fullName: string
+  external: boolean
+  /** Вес участия w; по умолчанию 1 (равные доли) */
+  weight: number
+  /** Доля α = w / Σw, 4 знака */
+  share: number
+  /** Балл участника B × α × c, 2 знака, распределён методом наибольших остатков */
+  points: number
+}
+
+export interface ParticipantRequest {
+  userId: number | null
+  /** ФИО внешнего соавтора; для сотрудника не нужно */
+  fullName: string | null
+  weight: number
+}
+
+export interface EvidenceDto {
   id: number
-  fileName: string
-  contentType: 'application/pdf' | 'image/jpeg' | 'image/png'
-  /** Размер в байтах, не больше 10 МБ */
-  size: number
-  /** Дата и время в ISO 8601 */
-  uploadedAt: string
+  /** Тип документа: «Копия статьи», «Сертификат участника»… */
+  docType: string
+  /** Файл или ссылка: заполнено одно из двух */
+  fileName: string | null
+  size: number | null
+  url: string | null
+  uploadedAt: IsoDateTime
+  uploadedBy: string
 }
 
-/** Запись преподавателя. Баллов здесь нет: их показывает кабинет */
-export interface EntryDto {
+/** Решение на маршруте согласования (ТЗ 11.1, Approval / Decision) */
+export type DecisionAction =
+  | 'CREATED'
+  | 'SUBMITTED'
+  | 'RETURNED'
+  | 'REVIEWED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'JOINED'
+  | 'REVISION'
+
+export interface DecisionDto {
+  id: number
+  action: DecisionAction
+  actor: string
+  comment: string | null
+  at: IsoDateTime
+}
+
+export interface AchievementDto {
   id: number
   indicatorId: number
-  periodId: number
-  /** Количество в единицах показателя */
-  value: number
-  /** Значения полей формы показателя, ключ — IndicatorField.key */
-  fields: Record<string, unknown>
-  comment: string | null
-  attachments: AttachmentDto[]
-  createdAt: string
-  updatedAt: string
-}
-
-export interface EntryRequest {
-  indicatorId: number
-  periodId: number
-  value: number
-  fields?: Record<string, unknown>
-  comment: string | null
-}
-
-// ---------- Кабинет и отчёты (пакет report) ----------
-
-export type ReportStatus = 'DRAFT' | 'SUBMITTED' | 'ACCEPTED' | 'RETURNED'
-
-/** Строка кабинета: один показатель и то, что по нему внесено за период */
-export interface CabinetRow {
-  indicatorId: number
+  indicatorCode: string
   indicatorName: string
-  categoryName: string
-  unit: string
+  category: Category
+  periodId: number
+  periodName: string
+  title: string
+  eventDate: IsoDate
+  identifierType: IdentifierType | null
+  identifier: string | null
+  programId: number | null
+  programName: string | null
+  /** Дисциплина учебного плана (показатели ППС 3–7) */
+  discipline: string | null
+  description: string | null
+  /** Кто подал заявку */
+  owner: PersonShort
+  /** Административный ввод за сотрудника: кто ввёл и на каком основании (ТЗ 2.2) */
+  enteredBy: string | null
+  basis: string | null
+  participants: ParticipantDto[]
+  /** Базовый балл показателя B на момент расчёта */
+  basePoints: number
   coefficient: number
-  maxScore: number
-  required: boolean
-  /** Сумма значений записей, null — записей нет */
-  value: number | null
-  /** Балл по показателю, уже ограниченный максимальным баллом */
-  score: number
+  status: ResultStatus
+  /** Кто проверяет: РОП или, если заявитель сам РОП, директор (ТЗ 2.2, запрет конфликта интересов) */
+  reviewer: 'ROP' | 'DIRECTOR'
+  /** Последнее замечание при возврате или причина отклонения */
+  lastComment: string | null
+  evidence: EvidenceDto[]
+  history: DecisionDto[]
+  /** Версия расчёта: растёт при пересмотре */
+  version: number
+  createdAt: IsoDateTime
+  updatedAt: IsoDateTime
 }
 
-/** GET /api/cabinet. Без periodId — текущий открытый период, 404 — открытого периода нет */
-export interface Cabinet {
-  period: PeriodDto
-  reportStatus: ReportStatus
-  totalScore: number
-  maxTotal: number
-  filledCount: number
-  indicatorCount: number
-  requiredFilled: number
-  requiredCount: number
-  rows: CabinetRow[]
+export interface AchievementRequest {
+  indicatorId: number
+  periodId: number
+  title: string
+  eventDate: IsoDate
+  identifierType: IdentifierType | null
+  identifier: string | null
+  programId: number | null
+  discipline: string | null
+  description: string | null
+  /** Сам заявитель добавляется сервером, здесь только соавторы */
+  coauthors: ParticipantRequest[]
+  /** Административный ввод: за кого и на каком основании */
+  ownerId: number | null
+  basis: string | null
 }
 
-export interface TeacherShort {
+/** Найденный возможный дубль (ТЗ 5.2) */
+export interface DuplicateDto {
+  achievementId: number
+  title: string
+  indicatorCode: string
+  eventDate: IsoDate
+  participants: string[]
+  status: ResultStatus
+  /** STRICT — совпал идентификатор, SIMILAR — похожие название и дата */
+  match: 'STRICT' | 'SIMILAR'
+}
+
+/** Решение проверяющего или директора; comment обязателен для возврата и отклонения */
+export interface DecisionRequest {
+  comment: string | null
+}
+
+// ---------- Целевые показатели РОП (ТЗ 6.3) ----------
+
+export interface MeasurementDto {
   id: number
-  fullName: string
-  department: string | null
-  position: string | null
+  indicatorId: number
+  indicatorCode: string
+  indicatorName: string
+  unit: string
+  periodId: number
+  programId: number
+  programName: string
+  target: number
+  direction: TargetDirection
+  percent: boolean
+  /** Для процентных: числитель A и знаменатель D */
+  numerator: number | null
+  denominator: number | null
+  /** Факт F; null — недостаточно данных (D = 0) */
+  value: number | null
+  /** P = 100 × F / T */
+  achievementPercent: number | null
+  /** Δ = F − T */
+  deviation: number | null
+  achieved: boolean | null
+  source: string | null
+  status: ResultStatus
+  enteredBy: string
+  updatedAt: IsoDateTime
 }
 
-/** Отчёт преподавателя: свой (GET /api/reports/my) или для админа (GET /api/reports/teachers/{id}) */
-export interface ReportDto {
-  /** null — отчёт ещё не создан */
-  id: number | null
-  teacher: TeacherShort
+export interface MeasurementRequest {
+  indicatorId: number
+  periodId: number
+  programId: number
+  value: number | null
+  numerator: number | null
+  denominator: number | null
+  source: string | null
+}
+
+// ---------- Баллы сотрудника (ТЗ 6.2, 8.2) ----------
+
+export interface ScoreRow {
+  indicatorId: number
+  indicatorCode: string
+  indicatorName: string
+  category: Category
+  basePoints: number
+  accrualMethod: AccrualMethod
+  maxPoints: number | null
+  /** Утверждено директором: входит в официальный итог */
+  approved: number
+  /** На проверке РОП или на утверждении */
+  onReview: number
+  /** Введено, но не отправлено: черновики и возвращённые */
+  entered: number
+  /** Число достижений, по которым есть начисление */
+  count: number
+}
+
+export interface MyScoresDto {
   period: PeriodDto
-  status: ReportStatus
-  submittedAt: string | null
-  returnComment: string | null
-  totalScore: number
-  maxTotal: number
-  rows: CabinetRow[]
+  rows: ScoreRow[]
+  approvedTotal: number
+  onReviewTotal: number
+  enteredTotal: number
 }
 
-export interface CategoryScore {
-  categoryId: number
-  categoryName: string
-  score: number
+// ---------- Дашборды (раздел 8) ----------
+
+export interface IndicatorSlice {
+  code: string
+  name: string
+  approved: number
+  pending: number
+  count: number
 }
 
-export interface SummaryRow {
-  place: number
-  teacherId: number
+export interface PersonSlice {
+  userId: number
   fullName: string
-  department: string | null
-  categoryScores: CategoryScore[]
-  totalScore: number
-  status: ReportStatus
+  departmentName: string | null
+  approved: number
+  pending: number
 }
 
-/** GET /api/reports/summary: сводный отчёт и рейтинг */
-export interface SummaryDto {
+export interface ProgramSlice {
+  programId: number
+  programName: string
+  approved: number
+}
+
+export interface DynamicsPoint {
+  periodName: string
+  approved: number
+}
+
+export interface DirectorDashboardDto {
   period: PeriodDto
-  categories: CategoryDto[]
-  rows: SummaryRow[]
+  pps: {
+    employees: number
+    approvedResults: number
+    approvedPoints: number
+    pendingPoints: number
+    /** Доля результатов, которые ещё на проверке или утверждении, % */
+    onReviewShare: number
+    byIndicator: IndicatorSlice[]
+    byEmployee: PersonSlice[]
+    byProgram: ProgramSlice[]
+    dynamics: DynamicsPoint[]
+  }
+  aup: {
+    employees: number
+    approvedPoints: number
+    pendingPoints: number
+    byIndicator: IndicatorSlice[]
+    /** Результаты АУП без утверждения */
+    unconfirmed: number
+  }
+  rop: MeasurementDto[]
+  signals: {
+    awaitingApproval: number
+    onReview: number
+    /** Целевые показатели РОП, которые не достигнуты */
+    deviations: number
+    periodEnd: IsoDate
+  }
 }
 
-export interface ControlRow {
-  teacherId: number
-  fullName: string
-  department: string | null
-  filledCount: number
-  indicatorCount: number
-  requiredFilled: number
-  requiredCount: number
-  totalScore: number
-  /** null — преподаватель ещё ничего не вносил */
-  status: ReportStatus | null
-  updatedAt: string | null
+// ---------- Журнал аудита (ТЗ 1.3, п. 6) ----------
+
+export interface AuditEventDto {
+  id: number
+  at: IsoDateTime
+  actor: string
+  /** Что сделано: CREATED, SUBMITTED, APPROVED, CLOSED… */
+  action: string
+  /** С чем: «Достижение #12 …», «Период …» */
+  object: string
+  comment: string | null
 }
 
-/** GET /api/reports/control: контроль сдачи */
-export interface ControlDto {
-  period: PeriodDto
-  teacherCount: number
-  submittedCount: number
-  inProgressCount: number
-  notStartedCount: number
-  rows: ControlRow[]
+// ---------- Импорт XLSX (ТЗ 7) ----------
+
+export type ImportType = 'EMPLOYEES' | 'INDICATORS' | 'MEASUREMENTS' | 'ACHIEVEMENTS'
+
+export interface ImportRowDto {
+  row: number
+  /** NEW — создать, UPDATE — обновить, SKIP — уже есть, ERROR — не загрузится */
+  action: 'NEW' | 'UPDATE' | 'SKIP' | 'ERROR'
+  key: string
+  message: string | null
+}
+
+export interface ImportJobDto {
+  id: number
+  type: ImportType
+  fileName: string
+  /** VALIDATED — проверен и ждёт подтверждения, APPLIED — загружен */
+  status: 'VALIDATED' | 'APPLIED'
+  uploadedBy: string
+  uploadedAt: IsoDateTime
+  rows: ImportRowDto[]
 }

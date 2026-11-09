@@ -1,30 +1,31 @@
-import type { Role } from '../api/types'
+import type { Role, UserDto } from '../api/types'
 
 export interface NavItem {
   to: string
   label: string
-  /** Функция после защиты: пункт ведёт на заглушку и помечен «скоро» */
-  soon?: boolean
+  /** Кому виден пункт: хотя бы одна из ролей */
+  roles: Role[]
 }
 
-export const NAV: Record<Role, NavItem[]> = {
-  TEACHER: [
-    { to: '/cabinet', label: 'Кабинет' },
-    { to: '/entries/new', label: 'Ввод данных' },
-    { to: '/report', label: 'Мой отчёт' },
-    { to: '/soon/history', label: 'История', soon: true },
-  ],
-  ADMIN: [
-    { to: '/admin/control', label: 'Контроль сдачи' },
-    { to: '/admin/summary', label: 'Сводный отчёт' },
-    { to: '/admin/indicators', label: 'Показатели' },
-    { to: '/admin/periods', label: 'Периоды' },
-    { to: '/admin/users', label: 'Пользователи' },
-    { to: '/soon/dashboard', label: 'Дашборд', soon: true },
-  ],
-}
+const ALL: Role[] = ['EMPLOYEE', 'REVIEWER', 'DIRECTOR', 'ADMIN']
 
-export const ROLE_LABEL: Record<Role, string> = {
-  TEACHER: 'Преподаватель',
-  ADMIN: 'Администратор',
+/** Разделы интерфейса по ТЗ, раздел 10 */
+const NAV: NavItem[] = [
+  { to: '/', label: 'Главная', roles: ALL },
+  { to: '/my/indicators', label: 'Мои показатели', roles: ['EMPLOYEE'] },
+  { to: '/my/achievements', label: 'Мои достижения', roles: ['EMPLOYEE', 'ADMIN'] },
+  { to: '/review', label: 'На проверке', roles: ['REVIEWER'] },
+  { to: '/approval', label: 'На утверждении', roles: ['DIRECTOR'] },
+  { to: '/targets', label: 'Цели РОП', roles: ['REVIEWER', 'DIRECTOR', 'ADMIN'] },
+  { to: '/registry', label: 'Реестр', roles: ['REVIEWER', 'DIRECTOR', 'ADMIN'] },
+  { to: '/analytics', label: 'Аналитика', roles: ['REVIEWER', 'DIRECTOR', 'ADMIN'] },
+  { to: '/reports', label: 'Отчёты', roles: ALL },
+  { to: '/admin', label: 'Администрирование', roles: ['ADMIN'] },
+]
+
+export function navFor(user: UserDto): NavItem[] {
+  return NAV.filter((item) => item.roles.some((role) => user.roles.includes(role))).map((item) =>
+    // У суперадминистратора без роли сотрудника это раздел административного ввода
+    item.to === '/my/achievements' && !user.roles.includes('EMPLOYEE') ? { ...item, label: 'Ввод результатов' } : item,
+  )
 }

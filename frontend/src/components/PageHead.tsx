@@ -11,6 +11,7 @@ interface PageHeadProps {
 export function PageHead({ title, lead, actions }: PageHeadProps) {
   return (
     <div className="page-head">
+      <title>{`${title} — Показатели эффективности`}</title>
       <div>
         <h1>{title}</h1>
         {lead && <p className="page-head__lead">{lead}</p>}
