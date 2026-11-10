@@ -5,12 +5,15 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AccountStatusException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -36,6 +39,26 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     ProblemDetail handleConflict(ConflictException e) {
         return problem(HttpStatus.CONFLICT, "Действие невозможно", e.getMessage());
+    }
+
+    /** Запасной случай: два одновременных запроса прошли проверку сервиса и упёрлись в ограничение базы. */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail handleDataConflict(DataIntegrityViolationException e) {
+        log.warn("Нарушено ограничение базы: {}", e.getMostSpecificCause().getMessage());
+        return problem(HttpStatus.CONFLICT, "Действие невозможно", "Данные конфликтуют с уже сохранёнными");
+    }
+
+    @ExceptionHandler(FieldValidationException.class)
+    ProblemDetail handleFieldValidation(FieldValidationException e) {
+        ProblemDetail body = problem(HttpStatus.BAD_REQUEST, "Ошибка в данных", "Проверьте заполнение полей");
+        body.setProperty("errors", e.getErrors());
+        return body;
+    }
+
+    /** Причина не уточняется: нельзя подсказывать, существует ли логин и активна ли учётная запись. */
+    @ExceptionHandler({BadCredentialsException.class, AccountStatusException.class})
+    ProblemDetail handleBadLogin(AuthenticationException e) {
+        return problem(HttpStatus.UNAUTHORIZED, "Вход не выполнен", "Неверный логин или пароль");
     }
 
     @ExceptionHandler(AuthenticationException.class)

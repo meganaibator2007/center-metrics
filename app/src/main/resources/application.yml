@@ -10,6 +10,10 @@ spring:
     hibernate:
       # Схему меняют только миграции Flyway
       ddl-auto: validate
+    properties:
+      hibernate:
+        # Списки подгружают связанные коллекции пачками, а не отдельным запросом на каждую строку
+        default_batch_fetch_size: 50
   flyway:
     locations: classpath:db/migration
     # У каждого пакета свой диапазон номеров, поэтому V101 может появиться после V600
@@ -35,6 +39,10 @@ app:
   storage:
     # Папка для прикреплённых файлов, вне static/. В Docker — том uploads
     dir: ${APP_STORAGE_DIR:./uploads}
+  admin:
+    # Первый администратор: создаётся при старте, если администраторов нет
+    login: ${ADMIN_LOGIN:}
+    password: ${ADMIN_PASSWORD:}
 
 # Проверка сервера: GET /api/health
 management:

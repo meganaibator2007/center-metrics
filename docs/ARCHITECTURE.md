@@ -135,7 +135,10 @@ audit     → только common, записывает событие AuditReco
 - Без входа открыты `GET /api/auth/csrf`, `POST /api/auth/login` и `GET /api/health`. Остальные адреса `/api` требуют входа, роль проверяется через `@PreAuthorize`.
 - Область доступа (программы РОП) и запрет проверять своё проверяются в сервисах, потому что зависят от конкретной записи.
 - CSRF: токен приходит в cookie `XSRF-TOKEN`, клиент возвращает его в заголовке `X-XSRF-TOKEN`.
+- Вход `POST /api/auth/login` проверяет пароль через `AuthenticationManager`, меняет ID сессии и CSRF-токен и сохраняет `CurrentUser` в сессии. Логин и пароль проверяет `AuthController` пакета `user`, а не форма Spring Security: клиент отправляет JSON.
+- `ActiveUserFilter` на каждый запрос сверяет пользователя с базой: деактивация сразу завершает сессию, новые роли действуют со следующего запроса.
 - Выход `POST /api/auth/logout` работает средствами Spring Security и отвечает 204.
+- Первого администратора создаёт `FirstAdminInitializer` при старте из `ADMIN_LOGIN` и `ADMIN_PASSWORD`, если администраторов нет.
 - Ошибки 401 и 403, в том числе из фильтров Spring Security, приходят в том же формате ProblemDetail, что и остальные.
 
 ## Ошибки
@@ -144,7 +147,7 @@ audit     → только common, записывает событие AuditReco
 
 | Ситуация | Код |
 |---|---|
-| ошибка в полях запроса, тексты по полям в `errors` | 400 |
+| ошибка в полях запроса или `FieldValidationException`, тексты по полям в `errors` | 400 |
 | нет входа | 401 |
 | нет прав, чужие данные, своё достижение на проверке, нет CSRF-токена | 403 |
 | `NotFoundException` | 404 |
@@ -213,7 +216,9 @@ center-metrics/
         │   │   ├── SecurityConfig.java       сессия, CSRF, 401/403, выход
         │   │   ├── CsrfController.java       GET /api/auth/csrf
         │   │   ├── ApiExceptionHandler.java  ошибки в формате ProblemDetail
-        │   │   ├── NotFoundException.java, ConflictException.java
+        │   │   ├── NotFoundException.java, ConflictException.java, FieldValidationException.java
+        │   │   ├── CurrentUser.java          вошедший пользователь, его ID нужен всем пакетам
+        │   │   ├── ActiveUserFilter.java     сверка пользователя с базой на каждый запрос
         │   │   └── AuditRecorded.java        событие для журнала аудита
         │   ├── user/          User, Role, Category, Department, Program, RoleAssignment, репозитории, мапперы,
         │   │                  контроллеры, UserRequest, LoginRequest, UserDto, PersonShort, UserService
