@@ -236,6 +236,11 @@ img { display: block; max-width: 100%; }
   vertical-align: 1px;
 }
 
+/* Подвал прижат к низу окна и на коротких страницах: в React всё лежит внутри #root,
+   поэтому колонкой должен быть он, а растягиваться — основная часть страницы */
+#root { flex: 1 0 auto; display: flex; flex-direction: column; }
+#root > .page { flex: 1 0 auto; }
+
 /* --- 4. Заголовок страницы и отступы (с. 41) --------------------------- */
 .page { padding: 24px 0 80px; }
 

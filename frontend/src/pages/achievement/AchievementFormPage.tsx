@@ -101,7 +101,15 @@ export function AchievementFormPage() {
   const current = useLoad(() => (editId ? Promise.resolve(null) : currentPeriod().catch(() => null)), `current-${editId}`)
 
   const loadError = indicators.error ?? periods.error ?? existing.error
-  if (loadError) return <ErrorAlert error={loadError} />
+  if (loadError) {
+    return (
+      <>
+        <Breadcrumbs items={[{ to: '/my/achievements', label: 'Мои достижения' }, { label: editId ? 'Изменение' : 'Новое достижение' }]} />
+        <PageHead title={editId ? 'Изменение достижения' : 'Новое достижение'} />
+        <ErrorAlert error={loadError} />
+      </>
+    )
+  }
   if (!indicators.data || !periods.data || existing.loading || current.loading) return <Loading />
   if (existing.data && !['DRAFT', 'RETURNED', 'REVISION'].includes(existing.data.status)) {
     return (
