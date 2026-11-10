@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { ResultStatus } from '../api/types'
-import { errorText } from '../lib/errors'
+import { errorText, isNotImplemented } from '../lib/errors'
 import { STATUS } from '../lib/labels'
 
 export function Badge({ kind, plain = false, children }: { kind?: string; plain?: boolean; children: ReactNode }) {
@@ -44,6 +44,9 @@ export function Alert({
 }
 
 export function ErrorAlert({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  if (isNotImplemented(error)) {
+    return <Alert title="Раздел в разработке">{errorText(error)}</Alert>
+  }
   return (
     <Alert kind="error" title="Не удалось выполнить запрос">
       <p>{errorText(error)}</p>
