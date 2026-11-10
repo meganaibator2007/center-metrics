@@ -9,8 +9,9 @@ README.md
 .env
 
 # Временные файлы сборки Java и фронтенда
-target/
-build/
-.gradle/
-node_modules/
-dist/
+# ** — в любой папке: контекст сборки — корень репозитория, иначе в Docker уйдёт frontend/node_modules
+**/target/
+**/build/
+**/.gradle/
+**/node_modules/
+**/dist/
