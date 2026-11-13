@@ -54,7 +54,7 @@ class UserControllerTest {
     private OrgService orgService;
 
     private RequestPostProcessor as(long id, String login, String role) {
-        CurrentUser principal = new CurrentUser(id, login, null, true, Set.of(role));
+        CurrentUser principal = new CurrentUser(id, login, null, true, false, Set.of(role));
         when(userDetailsService.loadUserByUsername(login)).thenReturn(principal);
         return user(principal);
     }

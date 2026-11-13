@@ -31,6 +31,7 @@ import ru.fa.kpi.TestcontainersConfiguration;
 class AchievementFlowTests {
 
     private static final String PASSWORD = "secret-123";
+    private static final String CHANGED_PASSWORD = "secret-456";
 
     @Autowired
     private MockMvc mvc;
@@ -41,6 +42,14 @@ class AchievementFlowTests {
                         .content("{\"login\": \"%s\", \"password\": \"%s\"}".formatted(login, password)))
                 .andExpect(status().isOk())
                 .andReturn().getRequest().getSession(false);
+    }
+
+    /** Первый вход: выданный пароль сразу меняется, иначе сервер не пустит дальше профиля. */
+    private MockHttpSession firstLogin(String login, String password, String newPassword) throws Exception {
+        MockHttpSession session = login(login, password);
+        send(session, "/api/auth/password", "{\"currentPassword\": \"%s\", \"newPassword\": \"%s\"}"
+                .formatted(password, newPassword)).andExpect(status().isNoContent());
+        return session;
     }
 
     private ResultActions send(MockHttpSession session, String url, String body) throws Exception {
@@ -72,7 +81,7 @@ class AchievementFlowTests {
 
     @Test
     void achievementGoesFromDraftToScore() throws Exception {
-        MockHttpSession admin = login("root", "root-pass-123");
+        MockHttpSession admin = firstLogin("root", "root-pass-123", "center-pass-456");
         long program = create(admin, "/api/programs", """
                 {"code": "09.03.03", "name": "Прикладная информатика", "topIt": true}""");
         long ivanov = create(admin, "/api/users", user("ivanov", "Иванов", "[\"EMPLOYEE\"]", "[\"PPS\"]", program, "[]"));
@@ -88,7 +97,7 @@ class AchievementFlowTests {
                 {"name": "Осенний семестр 2026/27", "type": "SEMESTER", "startDate": "2026-09-01", "endDate": "2027-01-31"}""");
 
         // Черновик: заявитель вес 1, коллега вес 1, внешний автор вес 2 → 20 × 1/4, 1/4, 2/4
-        MockHttpSession employee = login("ivanov", PASSWORD);
+        MockHttpSession employee = firstLogin("ivanov", PASSWORD, CHANGED_PASSWORD);
         String coauthors = """
                 [{"userId": %d, "fullName": null, "weight": 1, "basis": null},
                  {"userId": null, "fullName": "Smith J.", "weight": 2, "basis": null}]""".formatted(petrov);
@@ -119,7 +128,7 @@ class AchievementFlowTests {
                 .andExpect(jsonPath("$.reviewer").value("ROP"));
 
         // Тот же DOI в другой записи — строгий дубль, соавтору предлагают присоединиться
-        MockHttpSession coauthor = login("petrov", PASSWORD);
+        MockHttpSession coauthor = firstLogin("petrov", PASSWORD, CHANGED_PASSWORD);
         send(coauthor, "/api/achievements", achievement(indicator, period, "doi: 10.1000/abc.1", "[]"))
                 .andExpect(status().isConflict());
         send(coauthor, "/api/achievements/check-duplicates", """
@@ -133,12 +142,12 @@ class AchievementFlowTests {
 
         // Своё не проверяют; утверждение только после проверки
         send(employee, url + "/review", "{}").andExpect(status().isForbidden());
-        MockHttpSession director = login("director", PASSWORD);
+        MockHttpSession director = firstLogin("director", PASSWORD, CHANGED_PASSWORD);
         send(director, url + "/approve", "{}").andExpect(status().isConflict());
         mvc.perform(get("/api/achievements").param("scope", "approval").session(director))
                 .andExpect(jsonPath("$.length()").value(0));
 
-        MockHttpSession rop = login("rop", PASSWORD);
+        MockHttpSession rop = firstLogin("rop", PASSWORD, CHANGED_PASSWORD);
         mvc.perform(get("/api/achievements").param("scope", "review").session(rop))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
