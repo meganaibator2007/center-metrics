@@ -2,12 +2,16 @@ package ru.fa.kpi.user;
 
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,11 +32,13 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.fa.kpi.common.Category;
 import ru.fa.kpi.common.CurrentUser;
+import ru.fa.kpi.common.FieldValidationException;
 import ru.fa.kpi.common.SecurityConfig;
 
 @WebMvcTest(AuthController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, LoginThrottle.class})
 class AuthControllerTest {
 
     private static final String CREDENTIALS = "{\"login\": \"a.ivanova\", \"password\": \"secret-123\"}";
@@ -47,7 +53,7 @@ class AuthControllerTest {
     @MockitoBean
     private UserService userService;
 
-    private final CurrentUser employee = new CurrentUser(1L, "a.ivanova", null, true, Set.of("EMPLOYEE"));
+    private final CurrentUser employee = new CurrentUser(1L, "a.ivanova", null, true, false, Set.of("EMPLOYEE"));
 
     private static UserDto dto() {
         return new UserDto(1L, "a.ivanova", "Иванова Анна", "Иванова", "Анна", null, null, List.of(Role.EMPLOYEE),
@@ -113,7 +119,7 @@ class AuthControllerTest {
     @Test
     void deactivatedUserLosesSessionOnNextRequest() throws Exception {
         when(userDetailsService.loadUserByUsername("a.ivanova"))
-                .thenReturn(new CurrentUser(1L, "a.ivanova", null, false, Set.of("EMPLOYEE")));
+                .thenReturn(new CurrentUser(1L, "a.ivanova", null, false, false, Set.of("EMPLOYEE")));
 
         mvc.perform(get("/api/auth/me").with(user(employee))).andExpect(status().isUnauthorized());
     }
@@ -130,12 +136,46 @@ class AuthControllerTest {
     }
 
     @Test
-    void shortNewPasswordIsFieldError() throws Exception {
+    void weakNewPasswordIsFieldError() throws Exception {
         when(userDetailsService.loadUserByUsername("a.ivanova")).thenReturn(employee);
+        doThrow(new FieldValidationException("newPassword", "Не короче 8 символов"))
+                .when(userService).changePassword(1L, "old", "short");
 
         mvc.perform(post("/api/auth/password").with(user(employee)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"currentPassword\": \"old\", \"newPassword\": \"short\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors.newPassword").exists());
+                .andExpect(jsonPath("$.errors.newPassword").value("Не короче 8 символов"));
+    }
+
+    @Test
+    void loginIsLockedAfterFiveFailuresEvenWithRightPassword() throws Exception {
+        String attempt = "{\"login\": \"brute.force\", \"password\": \"guess-123\"}";
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad"));
+        for (int i = 0; i < LoginThrottle.MAX_LOGIN_FAILURES; i++) {
+            mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(attempt))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        mvc.perform(post("/api/auth/login").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(attempt))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "900"))
+                .andExpect(jsonPath("$.detail").value("Слишком много неудачных попыток входа. Повторите через 15 мин."));
+        verify(authenticationManager, times(LoginThrottle.MAX_LOGIN_FAILURES)).authenticate(any());
+    }
+
+    @Test
+    void issuedPasswordOpensOnlyProfileAndPasswordChange() throws Exception {
+        CurrentUser fresh = new CurrentUser(1L, "a.ivanova", null, true, true, Set.of("EMPLOYEE"));
+        when(userDetailsService.loadUserByUsername("a.ivanova")).thenReturn(fresh);
+        when(userService.getById(1L)).thenReturn(dto());
+
+        mvc.perform(get("/api/auth/me").with(user(fresh))).andExpect(status().isOk());
+        mvc.perform(get("/api/achievements").param("scope", "my").with(user(fresh)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true));
+        mvc.perform(post("/api/auth/password").with(user(fresh)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\": \"old\", \"newPassword\": \"new-secret-1\"}"))
+                .andExpect(status().isNoContent());
+        verify(userService, never()).recordLogin(any());
     }
 }

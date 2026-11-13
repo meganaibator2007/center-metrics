@@ -38,8 +38,16 @@ class FirstAdminInitializer implements ApplicationRunner {
         try {
             userService.createFirstAdmin(normalized, password);
             log.info("Создан первый администратор: {}", normalized);
-        } catch (ConflictException | FieldValidationException e) {
+        } catch (ConflictException e) {
             log.warn("Первый администратор не создан: {}", e.getMessage());
+            return;
+        } catch (FieldValidationException e) {
+            log.warn("Первый администратор не создан: {}", String.join("; ", e.getErrors().values()));
+            return;
         }
+        // Слабый пароль из .env не блокирует запуск: до смены пароля сервер пускает администратора только к смене
+        PasswordPolicy.violation(password, normalized).ifPresent(problem -> log.warn(
+                "Пароль первого администратора ненадёжный ({}). Задайте надёжный ADMIN_PASSWORD; "
+                        + "до смены пароля вход откроет только страницу смены пароля", problem));
     }
 }

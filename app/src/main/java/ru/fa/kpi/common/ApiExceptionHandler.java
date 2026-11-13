@@ -77,6 +77,27 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "Недостаточно прав", null);
     }
 
+    /** Право зависит от самой записи — объясняем, чего не хватает. */
+    @ExceptionHandler(ForbiddenException.class)
+    ProblemDetail handleForbiddenAction(ForbiddenException e) {
+        return problem(HttpStatus.FORBIDDEN, "Недостаточно прав", e.getMessage());
+    }
+
+    /** Признак {@code passwordChangeRequired} нужен клиенту, чтобы сразу открыть страницу смены пароля. */
+    @ExceptionHandler(PasswordChangeRequiredException.class)
+    ProblemDetail handlePasswordChangeRequired(PasswordChangeRequiredException e) {
+        ProblemDetail body = problem(HttpStatus.FORBIDDEN, "Смените пароль", e.getMessage());
+        body.setProperty("passwordChangeRequired", true);
+        return body;
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    ResponseEntity<ProblemDetail> handleTooManyRequests(TooManyRequestsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf((e.getRetryAfter().toMillis() + 999) / 1000))
+                .body(problem(HttpStatus.TOO_MANY_REQUESTS, "Слишком много попыток", e.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     ProblemDetail handleUnexpected(Exception e) {
         log.error("Необработанная ошибка", e);

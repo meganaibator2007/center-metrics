@@ -28,6 +28,7 @@ class CurrentUserDetailsService implements UserDetailsService {
                 user.getLogin(),
                 user.getPasswordHash(),
                 user.isActive(),
+                user.isMustChangePassword(),
                 user.activeRoles().stream().map(Role::name).collect(Collectors.toSet()));
     }
 }

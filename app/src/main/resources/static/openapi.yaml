@@ -49,7 +49,9 @@ paths:
     post:
       tags: [Вход и система]
       summary: Вход
-      description: Доступ — все. При успехе создаёт сессию.
+      description: >-
+        Доступ — все. При успехе создаёт сессию. После 5 неудачных попыток для логина за 15 минут
+        или 20 с одного адреса вход закрывается на 15 минут даже с верным паролем — ответ 429.
       operationId: login
       security:
         - csrf: []
@@ -76,6 +78,17 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          description: Слишком много неудачных попыток. В `detail` — через сколько минут повторить
+          headers:
+            Retry-After:
+              description: Через сколько секунд можно повторить вход
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /api/auth/logout:
     post:
       tags: [Вход и система]
@@ -2063,7 +2076,9 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
     Forbidden:
-      description: Нет прав или нет CSRF-токена
+      description: >-
+        Нет прав или нет CSRF-токена. Пока не сменён пароль, выданный администратором, сервер отвечает 403
+        с `passwordChangeRequired: true` на всё, кроме /api/auth/me, /api/auth/password и выхода
       content:
         application/problem+json:
           schema:
@@ -2101,6 +2116,9 @@ components:
           description: 'Только для 400: имя поля → текст'
           additionalProperties:
             type: string
+        passwordChangeRequired:
+          type: boolean
+          description: 'Только для 403: сначала нужно сменить выданный пароль'
     PageMeta:
       type: object
       description: Сведения о странице.
@@ -2196,6 +2214,7 @@ components:
         newPassword:
           type: string
           minLength: 8
+          description: 'Отличается от текущего; от 8 символов и не больше 72 байт (около 36 русских букв), хотя бы одна буква и одна цифра, без логина внутри и не из списка популярных паролей'
     ResetPasswordRequest:
       type: object
       description: Выдача нового временного пароля администратором.
@@ -2204,6 +2223,7 @@ components:
         password:
           type: string
           minLength: 8
+          description: 'От 8 символов и не больше 72 байт (около 36 русских букв), хотя бы одна буква и одна цифра, без логина внутри и не из списка популярных паролей'
     ActiveRequest:
       type: object
       description: Активация и деактивация.
@@ -2348,7 +2368,7 @@ components:
           maxLength: 50
         password:
           type: [string, 'null']
-          description: 'Временный пароль: обязателен при создании, при изменении игнорируется'
+          description: 'Временный пароль: обязателен при создании, при изменении игнорируется; от 8 символов и не больше 72 байт (около 36 русских букв), хотя бы одна буква и одна цифра, без логина внутри и не из списка популярных паролей'
     PageOfUsers:
       type: object
       description: Страница сотрудников.

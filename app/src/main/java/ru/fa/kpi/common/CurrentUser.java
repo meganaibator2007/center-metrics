@@ -19,18 +19,26 @@ public final class CurrentUser implements UserDetails, CredentialsContainer {
     private final String login;
     private String passwordHash;
     private final boolean active;
+    private final boolean mustChangePassword;
     private final Set<String> roles;
 
-    public CurrentUser(Long id, String login, String passwordHash, boolean active, Set<String> roles) {
+    public CurrentUser(Long id, String login, String passwordHash, boolean active, boolean mustChangePassword,
+                       Set<String> roles) {
         this.id = id;
         this.login = login;
         this.passwordHash = passwordHash;
         this.active = active;
+        this.mustChangePassword = mustChangePassword;
         this.roles = Set.copyOf(roles);
     }
 
     public Long getId() {
         return id;
+    }
+
+    /** Пароль выдал администратор, и сотрудник его ещё не сменил. */
+    public boolean isMustChangePassword() {
+        return mustChangePassword;
     }
 
     @Override
