@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -111,6 +112,27 @@ class ScoringServiceTest {
         verify(accruals).save(created.capture());
         assertThat(created.getValue().getStatus()).isEqualTo(AccrualStatus.ACTIVE);
         assertThat(created.getValue().getFormula()).isEqualTo(ScoringService.FORMULA);
+    }
+
+    /** Соавторы в событии в любом порядке, а блокировки — всегда по возрастанию: так два утверждения не ждут друг друга по кругу. */
+    @Test
+    void scoresAreLockedInFixedOrderBeforeRecalculation() {
+        when(accruals.findByUserIdAndPeriodIdAndIndicatorIdAndStatus(any(), any(), any(), any()))
+                .thenReturn(List.of(accrual(100L, "10.00")));
+        when(scores.findByUserIdAndPeriodIdAndIndicatorId(any(), any(), any())).thenReturn(Optional.empty());
+        BigDecimal half = new BigDecimal("0.5");
+        BigDecimal ten = new BigDecimal("10.00");
+        AchievementApproved coauthors = new AchievementApproved(100L, 1, INDICATOR, VERSION, PERIOD, new BigDecimal("20"),
+                BigDecimal.ONE, null, DIRECTOR, List.of(
+                        new AchievementApproved.Share(USER + 1, half, ten, ten),
+                        new AchievementApproved.Share(USER, half, ten, ten)));
+
+        scoring.accrue(coauthors);
+
+        InOrder order = inOrder(scores, accruals);
+        order.verify(scores).lock(USER, PERIOD, INDICATOR);
+        order.verify(scores).lock(USER + 1, PERIOD, INDICATOR);
+        order.verify(accruals, times(2)).findByUserIdAndPeriodIdAndIndicatorIdAndStatus(any(), any(), any(), any());
     }
 
     @Test
