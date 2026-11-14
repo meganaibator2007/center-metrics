@@ -10,6 +10,7 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
+import ru.fa.kpi.common.Category;
 
 /** Фильтры списка сотрудников. Условие добавляется только для заполненного фильтра. */
 record UserFilter(String q, Role role, Category category, Long departmentId, Boolean active) {

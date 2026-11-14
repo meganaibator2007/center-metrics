@@ -28,6 +28,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.fa.kpi.common.Category;
 import ru.fa.kpi.common.CurrentUser;
 import ru.fa.kpi.common.SecurityConfig;
 

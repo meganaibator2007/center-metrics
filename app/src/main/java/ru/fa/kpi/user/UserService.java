@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -45,6 +46,32 @@ public class UserService {
     public Page<UserDto> search(UserFilter filter, int page, int size) {
         PageRequest pageable = PageRequest.of(page, size, Sort.by("lastName", "firstName", "id"));
         return users.findAll(filter.toSpecification(), pageable).map(UserMapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, UserDto> getByIds(Collection<Long> ids) {
+        return users.findAllById(ids).stream().collect(Collectors.toMap(User::getId, UserMapper::toDto));
+    }
+
+    /** Краткие сведения о людях: для карточек и списков других модулей. */
+    @Transactional(readOnly = true)
+    public Map<Long, PersonShort> people(Collection<Long> ids) {
+        return users.findAllById(ids).stream().collect(Collectors.toMap(User::getId, UserMapper::toShort));
+    }
+
+    /** Какие из переданных сотрудников существуют и активны. */
+    @Transactional(readOnly = true)
+    public Set<Long> activeIds(Collection<Long> ids) {
+        return users.findAllById(ids).stream().filter(User::isActive).map(User::getId).collect(Collectors.toSet());
+    }
+
+    /** Действующие РОП, которые проверяют хотя бы одну из программ. */
+    @Transactional(readOnly = true)
+    public Set<Long> reviewersOf(Collection<Long> programIds) {
+        if (programIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(roleAssignments.findActiveUserIds(Role.REVIEWER, programIds));
     }
 
     /** Активные сотрудники: для выбора соавторов. */

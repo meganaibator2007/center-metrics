@@ -1,6 +1,10 @@
 package ru.fa.kpi.user;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -48,6 +52,16 @@ public class OrgService {
     @Transactional(readOnly = true)
     public List<ProgramDto> listPrograms() {
         return programs.findAllByOrderByCode().stream().map(OrgMapper::toDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ProgramDto> program(Long id) {
+        return programs.findById(id).map(OrgMapper::toDto);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, String> programNames(Collection<Long> ids) {
+        return programs.findAllById(ids).stream().collect(Collectors.toMap(Program::getId, Program::getName));
     }
 
     @Transactional
