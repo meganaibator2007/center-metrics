@@ -113,6 +113,7 @@ public class AchievementService {
         if (!achievement.isEditable()) {
             throw new ConflictException("Изменить можно только черновик, возвращённое или отправленное на пересмотр достижение");
         }
+        periods.requireOpen(achievement.getPeriodId());
         UserDto owner = users.getById(achievement.getOwnerId());
         IndicatorRule rule = ruleFor(request);
         validate(request, rule, owner, access.viewer(actorId));
@@ -133,6 +134,7 @@ public class AchievementService {
         if (achievement.getStatus() != ResultStatus.DRAFT) {
             throw new ConflictException("Удалить можно только черновик");
         }
+        periods.requireOpen(achievement.getPeriodId());
         achievements.delete(achievement);
     }
 
@@ -202,17 +204,24 @@ public class AchievementService {
 
     /** Редакция показателя, действующая на дату начала периода. В закрытый период вносить нельзя. */
     private IndicatorRule ruleFor(AchievementRequest request) {
-        PeriodDto period = periods.byIds(Set.of(request.periodId())).get(request.periodId());
-        if (period == null) {
+        PeriodDto period;
+        try {
+            period = periods.requireOpen(request.periodId());
+        } catch (NotFoundException e) {
             throw new FieldValidationException("periodId", "Период не найден");
         }
-        if (period.closed()) {
-            throw new ConflictException("Период «" + period.name() + "» закрыт");
-        }
+        validateEventDate(request.eventDate(), period);
+
         try {
             return indicators.ruleOn(request.indicatorId(), period.startDate());
         } catch (NotFoundException e) {
             throw new FieldValidationException("indicatorId", "Показатель не найден");
+        }
+    }
+
+    static void validateEventDate(java.time.LocalDate date, PeriodDto period) {
+        if (date.isBefore(period.startDate()) || date.isAfter(period.endDate())) {
+            throw new FieldValidationException("eventDate", "Дата достижения должна попадать в отчётный период");
         }
     }
 

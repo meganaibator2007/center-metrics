@@ -159,9 +159,7 @@ class AchievementWorkflowService {
     }
 
     private void requireOpenPeriod(Achievement achievement) {
-        if (periods.get(achievement.getPeriodId()).closed()) {
-            throw new ConflictException("Период закрыт: решения по нему возможны только после переоткрытия");
-        }
+        periods.requireOpen(achievement.getPeriodId());
     }
 
     private void checkRepeats(Achievement achievement, IndicatorRule rule) {
