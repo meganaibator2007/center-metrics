@@ -11,6 +11,7 @@ import ru.fa.kpi.common.ConflictException;
 import ru.fa.kpi.common.ForbiddenException;
 import ru.fa.kpi.common.NotFoundException;
 import ru.fa.kpi.user.UserService;
+import ru.fa.kpi.period.PeriodService;
 
 /**
  * Подтверждающие документы (ФР-04). Пока поддерживаются ссылки: загрузка файлов с контрольной суммой
@@ -24,6 +25,7 @@ class EvidenceService {
     private final AchievementAccess access;
     private final AchievementAssembler assembler;
     private final UserService users;
+    private final PeriodService periods;
 
     @Transactional
     EvidenceDto addLink(Long achievementId, EvidenceLinkRequest request, Long actorId) {
@@ -69,6 +71,7 @@ class EvidenceService {
         if (!achievement.isEditable()) {
             throw new ConflictException("Документы меняются только в черновике, после возврата или на пересмотре");
         }
+        periods.requireOpen(achievement.getPeriodId());
         return achievement;
     }
 

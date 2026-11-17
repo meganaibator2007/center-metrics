@@ -79,7 +79,7 @@ public class PeriodService {
     /** Закрытие фиксирует снимок официальных итогов: его делает scoring по событию PeriodClosed. */
     @Transactional
     public PeriodDto close(Long id, Long actorId) {
-        Period period = find(id);
+        Period period = lock(id);
         if (period.isClosed()) {
             throw new ConflictException("Период уже закрыт");
         }
@@ -93,7 +93,7 @@ public class PeriodService {
     /** Санкционированное переоткрытие (ТЗ 4.3). Пока нет журнала аудита, основание пишется в лог. */
     @Transactional
     public PeriodDto reopen(Long id, Long actorId, String reason) {
-        Period period = find(id);
+        Period period = lock(id);
         if (!period.isClosed()) {
             throw new ConflictException("Период не закрыт");
         }
@@ -102,6 +102,20 @@ public class PeriodService {
         period.setClosedBy(null);
         log.info("Период {} переоткрыт пользователем {}: {}", id, actorId, reason);
         return toDto(period);
+    }
+
+    /** Общая блокировка с закрытием, удерживаемая до конца транзакции. */
+    @Transactional
+    public PeriodDto requireOpen(Long id) {
+        Period period = lock(id);
+        if (period.isClosed()) {
+            throw new ConflictException("Период закрыт: изменения возможны только после переоткрытия");
+        }
+        return toDto(period);
+    }
+
+    private Period lock(Long id) {
+        return periods.findForUpdate(id).orElseThrow(() -> new NotFoundException("Период " + id + " не найден"));
     }
 
     private Period find(Long id) {

@@ -2,6 +2,8 @@ package ru.fa.kpi.scoring;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +32,11 @@ public class ScoringService {
     private final PeriodSnapshotRepository snapshots;
 
     private record ScoreKey(Long userId, Long periodId, Long indicatorId) {
+
+        /** Все транзакции блокируют итоги в одном порядке, поэтому не могут ждать друг друга по кругу. */
+        static final Comparator<ScoreKey> LOCK_ORDER = Comparator.comparing(ScoreKey::userId)
+                .thenComparing(ScoreKey::periodId)
+                .thenComparing(ScoreKey::indicatorId);
 
         static ScoreKey of(Accrual accrual) {
             return new ScoreKey(accrual.getUserId(), accrual.getPeriodId(), accrual.getIndicatorId());
@@ -71,6 +78,7 @@ public class ScoringService {
             accruals.save(accrual);
             touched.add(ScoreKey.of(accrual));
         }
+        lock(touched);
         touched.forEach(key -> recalculate(key, event.indicatorVersionId(), event.maxPoints(), event.approvedBy()));
     }
 
@@ -83,6 +91,7 @@ public class ScoringService {
             touched.add(ScoreKey.of(accrual));
         }
         accruals.flush();
+        lock(touched);
         for (ScoreKey key : touched) {
             scores.findByUserIdAndPeriodIdAndIndicatorId(key.userId(), key.periodId(), key.indicatorId())
                     .ifPresent(score -> recalculate(key, score.getIndicatorVersionId(), score.getMaxPoints(), event.rejectedBy()));
@@ -105,6 +114,17 @@ public class ScoringService {
             row.setTakenBy(event.closedBy());
             snapshots.save(row);
         }
+    }
+
+    /**
+     * Итог пересчитывается из действующих начислений, а чужие несохранённые начисления транзакция не видит.
+     * Если два утверждения по одному итогу считали бы его одновременно, второе записало бы сумму без баллов первого.
+     * Блокировка держится до конца транзакции, поэтому второе ждёт первое и считает уже с его начислениями.
+     */
+    private void lock(Collection<ScoreKey> keys) {
+        keys.stream()
+                .sorted(ScoreKey.LOCK_ORDER)
+                .forEach(key -> scores.lock(key.userId(), key.periodId(), key.indicatorId()));
     }
 
     private void recalculate(ScoreKey key, Long indicatorVersionId, BigDecimal maxPoints, Long actorId) {
