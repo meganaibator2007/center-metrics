@@ -60,7 +60,7 @@ public class SecurityConfig {
                                 exceptionResolver.resolveException(request, response, null, e))
                         .accessDeniedHandler((request, response, e) ->
                                 exceptionResolver.resolveException(request, response, null, e)))
-                .addFilterBefore(new ActiveUserFilter(users), AnonymousAuthenticationFilter.class);
+                .addFilterBefore(new ActiveUserFilter(users, exceptionResolver), AnonymousAuthenticationFilter.class);
         return http.build();
     }
 

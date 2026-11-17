@@ -1,6 +1,7 @@
 package ru.fa.kpi.user;
 
 import java.util.List;
+import ru.fa.kpi.common.Category;
 
 public record UserDto(
         Long id,

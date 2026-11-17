@@ -28,6 +28,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import ru.fa.kpi.common.Category;
 
 /** Сотрудник и его учётная запись. Не удаляется, а деактивируется. */
 @Entity

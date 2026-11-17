@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,7 +26,6 @@ import ru.fa.kpi.common.NotFoundException;
 @RequiredArgsConstructor
 public class UserService {
 
-    private static final int MIN_PASSWORD_LENGTH = 8;
     private static final String LOGIN_TAKEN = "Логин уже занят";
     private static final String EXTERNAL_ID_TAKEN = "Внешний идентификатор уже занят";
 
@@ -47,6 +47,32 @@ public class UserService {
         return users.findAll(filter.toSpecification(), pageable).map(UserMapper::toDto);
     }
 
+    @Transactional(readOnly = true)
+    public Map<Long, UserDto> getByIds(Collection<Long> ids) {
+        return users.findAllById(ids).stream().collect(Collectors.toMap(User::getId, UserMapper::toDto));
+    }
+
+    /** Краткие сведения о людях: для карточек и списков других модулей. */
+    @Transactional(readOnly = true)
+    public Map<Long, PersonShort> people(Collection<Long> ids) {
+        return users.findAllById(ids).stream().collect(Collectors.toMap(User::getId, UserMapper::toShort));
+    }
+
+    /** Какие из переданных сотрудников существуют и активны. */
+    @Transactional(readOnly = true)
+    public Set<Long> activeIds(Collection<Long> ids) {
+        return users.findAllById(ids).stream().filter(User::isActive).map(User::getId).collect(Collectors.toSet());
+    }
+
+    /** Действующие РОП, которые проверяют хотя бы одну из программ. */
+    @Transactional(readOnly = true)
+    public Set<Long> reviewersOf(Collection<Long> programIds) {
+        if (programIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(roleAssignments.findActiveUserIds(Role.REVIEWER, programIds));
+    }
+
     /** Активные сотрудники: для выбора соавторов. */
     @Transactional(readOnly = true)
     public List<PersonShort> listEmployees() {
@@ -62,9 +88,7 @@ public class UserService {
     @Transactional
     public UserDto create(UserRequest request, Long actorId) {
         validate(request, null);
-        if (request.password() == null || request.password().length() < MIN_PASSWORD_LENGTH) {
-            throw new FieldValidationException("password", "Не короче " + MIN_PASSWORD_LENGTH + " символов");
-        }
+        requireStrong("password", request.password(), request.login());
         String externalId = UserMapper.blankToNull(request.externalId());
         if (users.existsByLogin(request.login())) {
             throw new ConflictException(LOGIN_TAKEN);
@@ -120,6 +144,7 @@ public class UserService {
     @Transactional
     public void resetPassword(Long id, String password) {
         User user = find(id);
+        requireStrong("password", password, user.getLogin());
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setMustChangePassword(true);
     }
@@ -130,6 +155,10 @@ public class UserService {
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new FieldValidationException("currentPassword", "Неверный текущий пароль");
         }
+        if (newPassword.equals(currentPassword)) {
+            throw new FieldValidationException("newPassword", "Новый пароль должен отличаться от текущего");
+        }
+        requireStrong("newPassword", newPassword, user.getLogin());
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setMustChangePassword(false);
     }
@@ -155,6 +184,9 @@ public class UserService {
         if (users.existsByLogin(login)) {
             throw new ConflictException("Логин первого администратора уже занят: " + login);
         }
+        PasswordPolicy.unusable(password).ifPresent(message -> {
+            throw new FieldValidationException("password", "Пароль первого администратора: " + message);
+        });
         User admin = new User();
         admin.setLogin(login);
         admin.setLastName("Администратор");
@@ -162,6 +194,12 @@ public class UserService {
         admin.setPasswordHash(passwordEncoder.encode(password));
         addRole(admin, Role.ADMIN, null, null);
         openEmployment(users.save(admin), null);
+    }
+
+    private static void requireStrong(String field, String password, String login) {
+        PasswordPolicy.violation(password, login).ifPresent(message -> {
+            throw new FieldValidationException(field, message);
+        });
     }
 
     private User find(Long id) {

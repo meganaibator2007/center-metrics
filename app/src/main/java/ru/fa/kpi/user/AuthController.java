@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,12 +32,25 @@ class AuthController {
     private final SessionAuthenticationStrategy sessionStrategy;
     private final SecurityContextRepository securityContextRepository;
     private final UserService userService;
+    private final LoginThrottle throttle;
 
-    /** Проверяет пароль, меняет ID сессии и CSRF-токен и сохраняет вошедшего пользователя в сессии. */
+    /**
+     * Проверяет пароль, меняет ID сессии и CSRF-токен и сохраняет вошедшего пользователя в сессии.
+     * После серии неудач вход для логина или адреса временно закрыт: {@link LoginThrottle}.
+     */
     @PostMapping("/login")
     UserDto login(@Valid @RequestBody LoginRequest body, HttpServletRequest request, HttpServletResponse response) {
-        Authentication authentication = authenticationManager.authenticate(
-                UsernamePasswordAuthenticationToken.unauthenticated(body.login(), body.password()));
+        String address = request.getRemoteAddr();
+        throttle.check(body.login(), address);
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated(body.login(), body.password()));
+        } catch (AuthenticationException e) {
+            throttle.failed(body.login(), address);
+            throw e;
+        }
+        throttle.succeeded(body.login());
         sessionStrategy.onAuthentication(authentication, request, response);
 
         SecurityContext context = SecurityContextHolder.createEmptyContext();

@@ -28,6 +28,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import ru.fa.kpi.common.Category;
 import ru.fa.kpi.common.CurrentUser;
 import ru.fa.kpi.common.SecurityConfig;
 
@@ -53,7 +54,7 @@ class UserControllerTest {
     private OrgService orgService;
 
     private RequestPostProcessor as(long id, String login, String role) {
-        CurrentUser principal = new CurrentUser(id, login, null, true, Set.of(role));
+        CurrentUser principal = new CurrentUser(id, login, null, true, false, Set.of(role));
         when(userDetailsService.loadUserByUsername(login)).thenReturn(principal);
         return user(principal);
     }

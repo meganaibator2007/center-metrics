@@ -22,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import ru.fa.kpi.common.Category;
 import ru.fa.kpi.common.ConflictException;
 import ru.fa.kpi.common.FieldValidationException;
 
@@ -210,13 +211,34 @@ class UserServiceTest {
     }
 
     @Test
+    void newPasswordMustDifferFromCurrent() {
+        when(users.findById(7L)).thenReturn(Optional.of(existing()));
+        when(passwordEncoder.matches("same-secret-1", "old-hash")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.changePassword(7L, "same-secret-1", "same-secret-1"))
+                .isInstanceOfSatisfying(FieldValidationException.class,
+                        e -> assertThat(e.getErrors()).containsKey("newPassword"));
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
+    void temporaryPasswordFollowsSamePolicy() {
+        when(users.findById(7L)).thenReturn(Optional.of(existing()));
+
+        assertThatThrownBy(() -> service.resetPassword(7L, "qwerty123"))
+                .isInstanceOfSatisfying(FieldValidationException.class,
+                        e -> assertThat(e.getErrors()).containsKey("password"));
+        verify(passwordEncoder, never()).encode(any());
+    }
+
+    @Test
     void resetPasswordMakesItTemporary() {
         User user = existing();
         user.setMustChangePassword(false);
         when(users.findById(7L)).thenReturn(Optional.of(user));
-        when(passwordEncoder.encode("temp-secret")).thenReturn("temp-hash");
+        when(passwordEncoder.encode("temp-secret-7")).thenReturn("temp-hash");
 
-        service.resetPassword(7L, "temp-secret");
+        service.resetPassword(7L, "temp-secret-7");
 
         assertThat(user.getPasswordHash()).isEqualTo("temp-hash");
         assertThat(user.isMustChangePassword()).isTrue();

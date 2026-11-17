@@ -21,7 +21,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import ru.fa.kpi.TestcontainersConfiguration;
 
 /**
- * Весь путь на настоящем PostgreSQL: первый администратор, вход, сотрудник, перевод, смена пароля, деактивация.
+ * Весь путь на настоящем PostgreSQL: первый администратор, вход, обязательная смена выданного пароля, сотрудник,
+ * перевод, деактивация.
  * Проверяет и то, что сущности сходятся со схемой. Без Docker тест пропускается, в CI Docker есть.
  */
 @SpringBootTest(properties = {"app.admin.login=admin", "app.admin.password=first-admin-pass"})
@@ -41,6 +42,13 @@ class UserFlowTests {
                 .andReturn().getRequest().getSession(false);
     }
 
+    private void changePassword(MockHttpSession session, String current, String next) throws Exception {
+        mvc.perform(post("/api/auth/password").session(session).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\": \"%s\", \"newPassword\": \"%s\"}".formatted(current, next)))
+                .andExpect(status().isNoContent());
+    }
+
     private static String user(String position, String password) {
         return """
                 {"lastName": "Иванова", "firstName": "Анна", "middleName": null, "login": "a.ivanova",
@@ -57,6 +65,11 @@ class UserFlowTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.roles[0]").value("ADMIN"))
                 .andExpect(jsonPath("$.mustChangePassword").value(true));
+        // Выданным паролем пользуются только для его смены
+        mvc.perform(get("/api/users").session(admin))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true));
+        changePassword(admin, "first-admin-pass", "center-pass-2026");
 
         String created = mvc.perform(post("/api/users").session(admin).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(user("null", "\"secret-123\"")))
@@ -86,13 +99,14 @@ class UserFlowTests {
                 .andExpect(jsonPath("$.length()").value(1));
 
         MockHttpSession employee = login("a.ivanova", "secret-123");
-        mvc.perform(get("/api/users").session(employee)).andExpect(status().isForbidden());
-        mvc.perform(post("/api/auth/password").session(employee).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"currentPassword\": \"secret-123\", \"newPassword\": \"new-secret-1\"}"))
-                .andExpect(status().isNoContent());
+        mvc.perform(get("/api/employees").session(employee))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true));
+        changePassword(employee, "secret-123", "new-secret-1");
         mvc.perform(get("/api/auth/me").session(employee))
                 .andExpect(jsonPath("$.mustChangePassword").value(false));
+        mvc.perform(get("/api/employees").session(employee)).andExpect(status().isOk());
+        mvc.perform(get("/api/users").session(employee)).andExpect(status().isForbidden());
 
         mvc.perform(patch("/api/users/" + id + "/active").session(admin).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"active\": false}"))
