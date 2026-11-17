@@ -11,6 +11,19 @@
 
 Три контейнера: `frontend` (nginx раздаёт React и пересылает `/api`) → `backend` (Spring Boot) → `db` (PostgreSQL 16). Подробнее — в [архитектуре](docs/ARCHITECTURE.md#docker).
 
+## Запуск в Docker (как на защите)
+
+Нужен только Docker. Java, Maven и Node.js ставить не надо: всё собирается внутри контейнеров.
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.yml up -d --build
+```
+
+Через пару минут сайт откроется на http://localhost (порт меняется в `.env`: `WEB_PORT`). Остановить: `docker compose down`, удалить и данные: `docker compose down -v`.
+
+Без `-f docker-compose.yml` подключится `docker-compose.override.yml`: откроются порты базы (5432) и бэкенда (8080) и включится профиль `dev`.
+
 ## Что нужно для бэкенда
 
 - JDK 25

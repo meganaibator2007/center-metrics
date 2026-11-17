@@ -1,5 +1,5 @@
-version: '3.8'
-
+# Подключается сам при docker compose up: порты базы и бэкенда для разработки, профиль dev.
+# На стенде запуск без него: docker compose -f docker-compose.yml up -d --build
 services:
   db:
     ports:
