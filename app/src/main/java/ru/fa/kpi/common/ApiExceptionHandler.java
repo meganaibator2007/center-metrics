@@ -77,6 +77,12 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "Недостаточно прав", null);
     }
 
+    /** Право зависит от самой записи — объясняем, чего не хватает. */
+    @ExceptionHandler(ForbiddenException.class)
+    ProblemDetail handleForbiddenAction(ForbiddenException e) {
+        return problem(HttpStatus.FORBIDDEN, "Недостаточно прав", e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     ProblemDetail handleUnexpected(Exception e) {
         log.error("Необработанная ошибка", e);
